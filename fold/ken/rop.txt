@@ -1,0 +1,22 @@
+# Fold AI<br>
+## 最简洁的AI框架（无亢余提示词）
+<br>
+<br>
+
+**当前版本v0.0.1 beta内测版**<br>
+<br>
+<br>
+<br>
+因为是内测版本，个人项目，代码可能出错，如遇到显示BUG，大概率刷新页面即可，也可以到达GitHub页面上报问题<br>
+<br>
+<br>
+https://github.com/Xeno-Gen/Fold-AI/
+<br>
+
+![GitHub stars](https://img.shields.io/github/stars/Xeno-Gen/Fold-AI?style=social)
+![GitHub forks](https://img.shields.io/github/forks/Xeno-Gen/Fold-AI?style=social)
+![GitHub issues](https://img.shields.io/github/issues/Xeno-Gen/Fold-AI?style=social)
+
+<br>
+
+---

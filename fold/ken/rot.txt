@@ -1,0 +1,19 @@
+# Fold AI
+## The Most Concise AI Framework (No Redundant Prompts)<br>
+<br><br>
+
+**Current version: v0.0.1 beta**<br>
+<br>
+---
+<br>
+Since this is a beta version and a personal project, code may contain errors. If you encounter display bugs, simply refreshing the page will likely resolve them. You can also report issues on the GitHub page.
+<br>
+<br>
+https://github.com/Xeno-Gen/Fold-AI/
+<br>
+
+![GitHub stars](https://img.shields.io/github/stars/Xeno-Gen/Fold-AI?style=social)
+![GitHub forks](https://img.shields.io/github/forks/Xeno-Gen/Fold-AI?style=social)
+![GitHub issues](https://img.shields.io/github/issues/Xeno-Gen/Fold-AI?style=social)
+<br>
+---
