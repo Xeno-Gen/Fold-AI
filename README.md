@@ -14,7 +14,7 @@ Fold AI is built from the ground up for resource-constrained environments — li
 
 | Metric | Value |
 |--------|-------|
-| Package Size | 150 KB |
+| Package Size | 150 KB (.zip) / 700kB |
 | Memory Usage | ≤ 65 MB |
 | Minimum Environment | Linux with 128MB RAM |
 | Supported Platforms | Linux / Windows / Android Arm |
