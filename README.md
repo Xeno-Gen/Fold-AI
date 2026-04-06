@@ -46,8 +46,10 @@ Fold AI 专为资源受限环境从零构建——轻量化不是妥协，而是
 
 ### 环境要求
 
-- Node.js v24.11.1
-- Python 3.12.10
+- Node.js v20 ~ 24.11.1
+- Python 3.12 ~ 3.12.10
+
+(或尝试自己的版本)
 
 ### Windows 一键启动
 
@@ -58,7 +60,7 @@ Fold AI 专为资源受限环境从零构建——轻量化不是妥协，而是
 ```bash
 cd fold
 npm install
-npm start
+npm start / node server.js
 访问 http://localhost:17923
 ```
 
