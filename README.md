@@ -1,4 +1,3 @@
-```markdown
 # 🚀 Fold.ai
 
 **极速 · 便携 · 全平台 AI 对话客户端（Web GUI）**
