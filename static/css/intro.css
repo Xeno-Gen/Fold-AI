@@ -1,0 +1,7 @@
+.chat-messages,
+.message-bubble,
+#chatTextarea,
+#initialTextarea {
+    font-family: var(--chat-font, system-ui, -apple-system, sans-serif);
+}
+.message-bubble, .input-textarea, .markdown-body { font-family: var(--chat-font); }
