@@ -2,21 +2,19 @@
 
 **极速 · 便携 · 全平台 AI 对话客户端（Web GUI）**
 
-> 本项目完全由 **DeepSeek-v4-pro** 在 **20 分钟** 内自动生成，源码压缩后仅 **44KB**，运行时内存占用仅 **20MB** —— 一款真正“即开即用”的轻量级 AI 助手。
-
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-v20--v25.9.0-brightgreen?logo=node.js)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Size](https://img.shields.io/badge/压缩后-44KB-success)](#)
 [![Memory](https://img.shields.io/badge/内存-~20MB-9cf)](#)
 [![License](https://img.shields.io/badge/license-MIT-orange)](#license)
+
+> 本项目完全由 **DeepSeek-v4-pro** 在 **20 分钟** 内自动生成，源码压缩后仅 **44KB**，运行时内存占用仅 **20MB** —— 一款真正“即开即用”的轻量级 AI 助手。
 
 <details open>
 <summary>📸 界面预览（手机端友好）</summary>
 
 <img width="1599" height="813" alt="桌面端截图" src="https://github.com/user-attachments/assets/27ca4729-a9ad-4ef5-9b48-34afa6a8b91b" />
 <img width="1080" height="2121" alt="Screenshot_2026-04-26-20-14-35-54_a252b927494330cdc2c8ba3b3f952e5e" src="https://github.com/user-attachments/assets/31800069-abb6-4c65-a5dc-421760a0ed68" />
-
-
 
 </details>
 
@@ -144,4 +142,3 @@ MIT © 2025 Fold.ai 贡献者
 
 **⭐ 如果这个"20 分钟作品"让你觉得有趣，请点亮 Star！**  
 **让更多人看到 AI + TypeScript 的极致轻量魅力。**
-```
