@@ -34,6 +34,8 @@
 - ⚙️ **前端实时调参**：API 密钥、temperature、max_tokens 等全部在 Web 界面手动配置，无需编辑文件。
 - 🍪 **轻量会话管理**：仅使用 Cookie 标记用户身份，无数据库、无登录体系，极致简便。
 
+<img width="1593" height="799" alt="image" src="https://github.com/user-attachments/assets/284245e6-6506-4262-9993-cbda16b1e633" />
+
 ---
 
 > ⚠️ **安全提醒**  
