@@ -14,6 +14,7 @@ import { setDefaultParams } from '../lib/routes/config';
 import { uploadRouter } from '../lib/routes/upload';
 import { downloadRouter } from '../lib/routes/download';
 import { storageRouter } from '../lib/routes/storage';
+import { pluginsRouter } from '../lib/routes/plugins';
 
 const envPath = path.join(__dirname, '../config/.env');
 const envContent = fs.readFileSync(envPath, 'utf-8');
@@ -54,6 +55,7 @@ app.use(cookieParser());
 app.use(initUserMiddleware);
 
 app.use(express.static(path.join(__dirname, '../static')));
+app.use('/plugins', express.static(path.join(__dirname, '../Plugin')));
 
 app.use('/api', chatRouter);
 app.use('/api', configRouter);
@@ -62,6 +64,7 @@ app.use('/api', chatsRouter);
 app.use('/api', uploadRouter);
 app.use('/api', downloadRouter);
 app.use('/api', storageRouter);
+app.use('/api', pluginsRouter);
 
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../static/intro.html'));
@@ -71,6 +74,7 @@ const dirs = [
     path.join(__dirname, '../data'),
     path.join(__dirname, '../data/users'),
     path.join(__dirname, '../data/uploads'),
+    path.join(__dirname, '../data/plugin_data'),
 ];
 dirs.forEach(dir => {
     if (!fs.existsSync(dir)) {

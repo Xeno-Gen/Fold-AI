@@ -121,12 +121,34 @@
         body.chat-active .center-initial{display:none;}
         .title-container{position:relative;display:inline-block;overflow:hidden;}
         .title-text{font-size:50px;letter-spacing:-1.5px;color:#1a1a1a;z-index:1;}
-        .title-beam{
-            position:absolute;top:0;width:60px;height:100%;
-            background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.12) 20%,rgba(255,255,255,0.5) 40%,rgba(255,255,255,0.65) 50%,rgba(255,255,255,0.5) 60%,rgba(255,255,255,0.12) 80%,transparent 100%);
-            z-index:3;animation:beamSweep 3.2s infinite;border-radius:4px;filter:blur(1px);
-        }
-        @keyframes beamSweep{0%{left:100%;opacity:0;}3%{opacity:1;}18%{left:-60px;opacity:1;}22%{left:-60px;opacity:0;}100%{left:-60px;opacity:0;}}
+        .title-beam {
+    position: absolute;
+    top: 0;
+    width: 80px;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.08) 15%,
+        rgba(255, 255, 255, 0.35) 40%,
+        rgba(255, 255, 255, 0.55) 50%,
+        rgba(255, 255, 255, 0.35) 60%,
+        rgba(255, 255, 255, 0.08) 85%,
+        transparent 100%
+    );
+    z-index: 3;
+    animation: beamSweep 3s infinite;
+    border-radius: 4px;
+    filter: blur(0.5px);
+}
+
+@keyframes beamSweep {
+    0% { left: 100%; opacity: 0; }
+    5% { opacity: 1; }
+    22% { left: -80px; opacity: 1; }
+    26% { left: -80px; opacity: 0; }
+    100% { left: -80px; opacity: 0; }
+}
         .title-glow{
             position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120%;height:120%;
             background:radial-gradient(ellipse at center,rgba(0,0,0,0.025) 0%,transparent 70%);
@@ -230,6 +252,9 @@
         .message-user{align-self:flex-end;background:var(--bubble-user);color:var(--bubble-user-text);border-radius:18px 18px 6px 18px;}
         .message-ai{align-self:flex-start;background:transparent;color:#1a1a1a;max-width:100%;}
         .message-ai .markdown-body{font-size:15px;line-height:1.6;}
+        .message-system{align-self:stretch;background:#f5f5f5;color:#555;font-size:13px;line-height:1.5;border-radius:8px;padding:8px 14px;margin:4px 0;max-width:100%;}
+        .message-system .markdown-body{font-size:13px;line-height:1.5;}
+        [data-theme="dark"] .message-system{background:#1a1a1a;color:#999;}
 
         .message-user .message-actions{
             position:absolute;
@@ -246,6 +271,17 @@
             position:absolute;
             left: 16px;
             bottom: -36px;
+            display: flex;
+            gap: 2px;
+            opacity:0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .message-system .message-actions{
+            position:absolute;
+            right: 16px;
+            bottom: -32px;
             display: flex;
             gap: 2px;
             opacity:0;
@@ -318,6 +354,13 @@
         }
         .think-block.collapsed .think-body-wrapper {
             display: none;
+        }
+
+        .think-status {
+            font-weight: 400;
+            font-size: 11px;
+            color: #888;
+            margin-left: 6px;
         }
 
         .bottom-input-container{
@@ -442,6 +485,15 @@
             <div class="sidebar-section-title">对话历史</div>
             <ul class="chat-history-list" id="chatHistoryList"></ul>
         </div>
+        <!-- 侧边栏底部设置按钮 -->
+        <div class="sidebar-bottom">
+            <button class="icon-circle sidebar-settings-btn" id="sidebarSettingsBtn" title="设置">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </button>
+        </div>
     </aside>
 
     <main class="main-content" id="mainContent">
@@ -463,12 +515,16 @@
                         <button class="tool-btn" id="initialAttachBtn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
                         <button class="tool-btn" id="initialSettingsBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 <button class="tool-btn" id="initialFileBtn" title="文件"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></button>
+<button class="tool-btn" id="initialDeepThinkBtn" title="深度思考">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.47V19a2 2 0 11-4 0v-.53c0-1.03-.47-1.99-1.274-2.618l-.548-.547z"/>
+    </svg>
+</button>
                                              </div>
                     <div class="toolbar-right">
                         <div class="model-select-wrapper" id="initialModelWrapper">
                             <button class="model-select-btn" id="initialModelBtn"><span class="model-dot"></span><span id="initialModelLabel">deepseek-v4-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
                         </div>
-                        <span class="char-count" id="initialCharCount">0/8000</span>
                         <button class="tool-btn send-btn" id="initialSendBtn" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
                     </div>
                 </div>
@@ -490,12 +546,17 @@
                         <button class="tool-btn" id="chatAttachBtn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
                         <button class="tool-btn" id="settingsBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 <button class="tool-btn" id="chatFileBtn" title="文件"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></button>
+<button class="tool-btn" id="chatDeepThinkBtn" title="深度思考">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.47V19a2 2 0 11-4 0v-.53c0-1.03-.47-1.99-1.274-2.618l-.548-.547z"/>
+    </svg>
+</button>
                                                </div>
                     <div class="toolbar-right">
                         <div class="model-select-wrapper" id="chatModelWrapper">
                             <button class="model-select-btn" id="chatModelBtn"><span class="model-dot"></span><span id="chatModelLabel">deepseek-v4-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
                         </div>
-                        <span class="char-count" id="chatCharCount">0/8000</span>
+
                         <button class="tool-btn send-btn" id="chatSendBtn" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
                     </div>
                 </div>
@@ -512,6 +573,81 @@
     </div>
     <div class="toast" id="toast" style="opacity:0;pointer-events:none;"></div>
     <input type="file" id="hiddenFileInput" multiple style="display:none;">
+</div>
+
+<!-- 设置模态框 -->
+<div class="settings-modal-overlay" id="settingsModalOverlay">
+    <div class="settings-modal" id="settingsModal">
+        <div class="settings-modal-header">
+            <h2>设置</h2>
+            <button class="settings-modal-close" id="settingsModalClose">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="settings-modal-body" id="settingsModalBody">
+            <!-- 常规设置 -->
+            <div class="settings-section">
+                <div class="settings-section-title">常规</div>
+
+                <!-- 主题选择 -->
+                <div class="settings-item">
+                    <div class="settings-item-left">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                        </svg>
+                        <span>主题模式</span>
+                    </div>
+                    <div class="think-mode-selector" id="themeSelector">
+                        <button class="think-mode-option" data-theme="light">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                            <span>浅色</span>
+                        </button>
+                        <button class="think-mode-option" data-theme="dark">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                            <span>深色</span>
+                        </button>
+                        <button class="think-mode-option" data-theme="system">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                            <span>跟随系统</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 命令执行设置 -->
+            <div class="settings-section">
+                <div class="settings-section-title">命令执行</div>
+
+                <div class="settings-item">
+                    <div class="settings-item-left">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                        <span>执行前确认</span>
+                    </div>
+                    <div class="think-mode-selector" id="commandConfirmToggle" style="display: inline-flex;">
+                        <button class="think-mode-option active" data-value="true">开启</button>
+                        <button class="think-mode-option" data-value="false">关闭</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 关于 -->
+            <div class="settings-section">
+                <div class="settings-section-title">关于</div>
+                <div class="settings-item">
+                    <div class="settings-item-left">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        <span>版本 Beta 0.1.2 · Fold.AI</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 <!-- 移动端侧边栏按钮 -->
 <button class="mobile-sidebar-btn" id="mobileSidebarBtn">
@@ -557,6 +693,7 @@
     </div>
 </div>
 
+<script src="/plugins/CommandExecution/index.js"></script>
 <script src="intro.js"></script>
 </body>
 </html>

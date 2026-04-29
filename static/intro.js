@@ -56,8 +56,6 @@ window.saveCodeBlockToStorage = async function(code, lang) {
         chatText = $('chatTextarea');
     const initSend = $('initialSendBtn'),
         chatSend = $('chatSendBtn');
-    const initChar = $('initialCharCount'),
-        chatChar = $('chatCharCount');
     const initPreview = $('initialImagePreview'),
         chatPreview = $('chatImagePreview');
     const chatHeader = $('chatHeader'),
@@ -100,11 +98,17 @@ const chatFileBtn = $('chatFileBtn'),
 
 
     let isChatActive = false;
+    let deepThinkEnabled = false;
+    let currentThinkMode = 'direct'; // 'deep' | 'direct' | 'reason' | 'creative'
+    let commandExecEnabled = false;
+    let commandConfirmEnabled = true;
+    let currentTheme = 'system'; // 'light' | 'dark' | 'system'
     let chats = [[]],
         chatTitles = ['当前对话'],
         currentChat = 0;
     let activeFiles = { initial: [], chat: [] };
     let streaming = false;
+    let currentAbortController = null;
     let currentProvider = null;
     let currentModel = 'deepseek-v4-flash';
     let currentParams = {
@@ -124,6 +128,60 @@ const chatFileBtn = $('chatFileBtn'),
     const pinnedChats = new Set();
     let pendingNewChatIndex = null;
 
+    // 主题管理
+    function applyTheme(theme) {
+        if (theme === 'system') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        } else {
+            document.documentElement.setAttribute('data-theme', theme);
+        }
+    }
+
+    // 加载保存的设置
+    function loadSettings() {
+        try {
+            const saved = localStorage.getItem('fold_ai_settings');
+            if (saved) {
+                const s = JSON.parse(saved);
+                currentTheme = s.theme || 'system';
+                commandConfirmEnabled = s.commandConfirm !== undefined ? s.commandConfirm : true;
+                commandExecEnabled = s.commandExecEnabled || false;
+                currentThinkMode = s.thinkMode || 'direct';
+                deepThinkEnabled = s.deepThink || false;
+            }
+        } catch (e) {}
+        applyTheme(currentTheme);
+    }
+
+    function saveSettingsToLocal() {
+        try {
+            localStorage.setItem('fold_ai_settings', JSON.stringify({
+                theme: currentTheme,
+                commandConfirm: commandConfirmEnabled,
+                commandExecEnabled: commandExecEnabled,
+                thinkMode: currentThinkMode,
+                deepThink: deepThinkEnabled
+            }));
+        } catch (e) {}
+    }
+
+    // 从 Config 文件夹加载提示词配置
+    let configPrompts = { think_modes: {} };
+
+    async function loadConfigPrompts() {
+        try {
+            const res = await fetch('/api/config/prompts.json');
+            if (res.ok) configPrompts = await res.json();
+        } catch (e) {}
+    }
+
+    // 获取当前模式的推理步骤
+    function getReasonSteps() {
+        const mode = configPrompts.think_modes?.[currentThinkMode];
+        return mode?.steps || [];
+    }
+
     function escapeHtml(text) {
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
         return String(text).replace(/[&<>"']/g, m => map[m]);
@@ -137,13 +195,27 @@ const chatFileBtn = $('chatFileBtn'),
     }
 
     function updateSendBtn() {
-        const ta = isChatActive ? chatText : initText;
-        const target = isChatActive ? 'chat' : 'initial';
-        const hasContent = ta.value.trim() || activeFiles[target].length > 0;
-        const btn = isChatActive ? chatSend : initSend;
+    const buttons = [
+        { btn: initSend, target: 'initial' },
+        { btn: chatSend, target: 'chat' }
+    ];
+    buttons.forEach(({ btn, target }) => {
         if (!btn) return;
-        btn.disabled = !hasContent || streaming;
-    }
+        if (streaming) {
+            btn.classList.add('stop-btn');
+            btn.disabled = false;
+            btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`;
+            btn.title = '停止生成';
+        } else {
+            btn.classList.remove('stop-btn');
+            const ta = isChatActive ? chatText : initText;
+            const hasContent = ta.value.trim() || activeFiles[target].length > 0;
+            btn.disabled = !hasContent;
+            btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+            btn.title = '发送';
+        }
+    });
+}
 
     function openFileViewer(name, content) {
         if (fileViewerTitle) fileViewerTitle.textContent = name;
@@ -168,6 +240,72 @@ const chatFileBtn = $('chatFileBtn'),
             }
         };
     }
+
+    // ========== 设置模态框 ==========
+    const sidebarSettingsBtn = document.getElementById('sidebarSettingsBtn');
+    const settingsModalOverlay = document.getElementById('settingsModalOverlay');
+    const settingsModal = document.getElementById('settingsModal');
+    const settingsModalClose = document.getElementById('settingsModalClose');
+
+    function openSettingsModal() {
+        settingsModalOverlay.classList.add('active');
+        settingsModal.classList.add('active');
+        renderSettingsModal();
+    }
+
+    function closeSettingsModal() {
+        settingsModal.classList.remove('active');
+        setTimeout(() => {
+            settingsModalOverlay.classList.remove('active');
+        }, 200);
+    }
+
+    function renderSettingsModal() {
+        document.querySelectorAll('#themeSelector .think-mode-option').forEach(opt => {
+            opt.classList.toggle('active', opt.dataset.theme === currentTheme);
+        });
+        document.querySelectorAll('#commandConfirmToggle .think-mode-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.value === String(commandConfirmEnabled));
+        });
+    }
+
+    if (sidebarSettingsBtn) {
+        sidebarSettingsBtn.onclick = openSettingsModal;
+    }
+    if (settingsModalClose) {
+        settingsModalClose.onclick = closeSettingsModal;
+    }
+    if (settingsModalOverlay) {
+        settingsModalOverlay.addEventListener('click', e => {
+            if (e.target === settingsModalOverlay) closeSettingsModal();
+        });
+    }
+
+    // 设置模态框内的事件代理
+    document.addEventListener('click', function(e) {
+        if (!settingsModalOverlay.classList.contains('active')) return;
+        const themeOption = e.target.closest('#themeSelector .think-mode-option');
+        if (themeOption) {
+            currentTheme = themeOption.dataset.theme;
+            applyTheme(currentTheme);
+            saveSettingsToLocal();
+            renderSettingsModal();
+        }
+        const confirmToggle = e.target.closest('#commandConfirmToggle .think-mode-option');
+        if (confirmToggle) {
+            commandConfirmEnabled = confirmToggle.dataset.value === 'true';
+            renderSettingsModal();
+            saveSettingsToLocal();
+            if (window.CommandExecutionPlugin) {
+                window.CommandExecutionPlugin.setConfirmBeforeExecution(commandConfirmEnabled);
+            }
+        }
+    });
+
+    // 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (currentTheme === 'system') applyTheme('system');
+    });
 
     async function uploadFile(file) {
         const formData = new FormData();
@@ -263,13 +401,11 @@ const chatFileBtn = $('chatFileBtn'),
     };
 
     initText.oninput = () => {
-        initChar.textContent = initText.value.length + '/8000';
-        updateSendBtn();
-    };
+    updateSendBtn();
+};
     chatText.oninput = () => {
-        chatChar.textContent = chatText.value.length + '/8000';
-        updateSendBtn();
-    };
+    updateSendBtn();
+};
 
     let dropdownInstance = null;
     (function initDropdown() {
@@ -549,6 +685,22 @@ const chatFileBtn = $('chatFileBtn'),
         html +=
             `<div class="param-item"><label>自定义端口</label><input type="number" id="customPortInput" value="${customPort}" min="1" max="65535"></div>`;
         html += '</div>';
+
+        // 额外提示词（只读，根据当前模式显示）
+        html += '<div class="section-title" style="margin-top:20px;">额外提示词</div>';
+        html += '<div class="extra-prompts-section" id="extraPromptsSection">';
+        const modeInfo = configPrompts.think_modes?.[currentThinkMode];
+        if (currentThinkMode === 'deep') {
+            html += '<div class="extra-prompt-item"><span class="extra-prompt-label">沉思模式</span><span class="extra-prompt-value">开启 API deep_think 参数</span></div>';
+        } else if (currentThinkMode === 'direct') {
+            html += '<div class="extra-prompt-item"><span class="extra-prompt-label">直接模式</span><span class="extra-prompt-value">无额外提示词</span></div>';
+        } else if (currentThinkMode === 'reason' || currentThinkMode === 'direct') {
+            html += '<div class="extra-prompt-item"><span class="extra-prompt-label">直接模式</span><span class="extra-prompt-value">无额外提示词</span></div>';
+        } else if (currentThinkMode === 'creative') {
+            html += '<div class="extra-prompt-item"><span class="extra-prompt-label">创意模式</span><span class="extra-prompt-value">（暂未实现）</span></div>';
+        }
+        html += '</div>';
+
         drawerBody.innerHTML = html;
 
         drawerBody.querySelectorAll('.provider-card').forEach(card => {
@@ -811,11 +963,14 @@ const chatFileBtn = $('chatFileBtn'),
 
     function createMessageBubble(content, role, images = [], reasoning = null, msgRef = null) {
         const bubble = document.createElement('div');
-        bubble.className = 'message-bubble message-' + (role === 'user' ? 'user' : 'ai');
+        const roleClass = role === 'system' ? 'system' : (role === 'user' ? 'user' : 'ai');
+        bubble.className = 'message-bubble message-' + roleClass;
         let reasoningHtml = reasoning ? createThinkBlock(reasoning) : '';
         let contentHtml;
         if (role === 'ai') {
             contentHtml = renderMarkdown(content);
+        } else if (role === 'system') {
+            contentHtml = `<div class="markdown-body system-message">${renderMarkdown(content)}</div>`;
         } else {
             contentHtml = `<div class="markdown-body">${escapeHtml(content).replace(/\n/g, '<br>')}</div>`;
         }
@@ -836,7 +991,10 @@ const chatFileBtn = $('chatFileBtn'),
 
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'message-actions';
-        if (role === 'user') {
+        if (role === 'system') {
+            actionsDiv.innerHTML = `<button class="action-icon" data-action="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 12-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button class="action-icon" data-action="delete" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 12 2v2"/></svg></button>`;
+        } else if (role === 'user') {
             actionsDiv.innerHTML = `<button class="action-icon" data-action="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 12-2h9a2 2 0 0 1 2 2v1"/></svg></button>
         <button class="action-icon" data-action="edit" title="修改"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <button class="action-icon" data-action="delete" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 12 2v2"/></svg></button>`;
@@ -994,20 +1152,123 @@ const chatFileBtn = $('chatFileBtn'),
         return bubble;
     }
 
+    // 过滤工具调用行（不显示给用户）
+    function stripToolLines(text) {
+        return text.split('\n')
+            .filter(l => {
+                const t = l.trim();
+                return !t.startsWith('tool:') && !/^(Power\d+|cmd\d+):/i.test(t);
+            })
+            .join('\n')
+            .trim();
+    }
+
+    // 解析并执行工具调用
+    async function processToolCalls(responseText) {
+        if (!/tool:CommandExecution/i.test(responseText)) return false;
+
+        const commands = [];
+        const powerRe = /Power(\d+):\s*([^\n]+?)(?=\s*(?:Power\d+|cmd\d+:|$))/gi;
+        const cmdRe = /cmd(\d+):\s*([^\n]+?)(?=\s*(?:Power\d+|cmd\d+:|$))/gi;
+        let m;
+        while ((m = powerRe.exec(responseText)) !== null) {
+            commands.push({ shell: 'powershell', command: m[2].trim(), idx: parseInt(m[1]) });
+        }
+        while ((m = cmdRe.exec(responseText)) !== null) {
+            commands.push({ shell: 'cmd', command: m[2].trim(), idx: parseInt(m[1]) });
+        }
+        if (!commands.length) return false;
+
+        commands.sort((a, b) => a.idx - b.idx);
+        const dangerous = [/rm\s+-rf/i, /format\s+\w/i, /del\s+\/f/i, /rd\s+\/s/i, /shutdown/i, /restart-computer/i, /stop-computer/i];
+        let executed = false;
+
+        for (const { shell, command } of commands) {
+            if (dangerous.some(p => p.test(command))) {
+                const msg = { role: 'system', content: `⚠️ 危险命令已被拦截: ${command}`, images: [] };
+                chats[currentChat].push(msg);
+                addMessage(msg.content, 'system', [], null, msg);
+                continue;
+            }
+            if (commandConfirmEnabled && window.CommandExecutionPlugin) {
+                try { if (!(await window.CommandExecutionPlugin.confirmCommand(shell, command))) {
+                    const msg = { role: 'system', content: `❌ 命令已取消: ${shell} ${command}`, images: [] };
+                    chats[currentChat].push(msg);
+                    addMessage(msg.content, 'system', [], null, msg);
+                    continue;
+                }} catch (e) { continue; }
+            }
+            executed = true;
+            const execMsg = { role: 'system', content: `⏳ 执行中: ${shell}> ${command}`, images: [] };
+            chats[currentChat].push(execMsg);
+            const execBubble = addMessage(execMsg.content, 'system', [], null, execMsg);
+            try {
+                const res = await fetch('/api/plugin/command/execute', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shell, command, timeout: 30000 })
+                });
+                if (res.ok) {
+                    const d = await res.json();
+                    const out = (d.stdout || d.stderr || '').trim();
+                    const resultText = `${out ? out.substring(0, 2000) : '(无输出)'}\n退出码: ${d.exitCode}`;
+                    // 更新气泡内容
+                    const sysMsg = { role: 'system', content: `[命令结果] ${shell}> ${command}\n${resultText}`, images: [] };
+                    const idx = chats[currentChat].indexOf(execMsg);
+                    if (idx !== -1) chats[currentChat][idx] = sysMsg;
+                    execBubble.replaceWith(createMessageBubble(sysMsg.content, 'system', [], null, sysMsg));
+                } else {
+                    const e = await res.text();
+                    const sysMsg = { role: 'system', content: `❌ 命令失败: ${shell}> ${command}\n${e}`, images: [] };
+                    const idx = chats[currentChat].indexOf(execMsg);
+                    if (idx !== -1) chats[currentChat][idx] = sysMsg;
+                    execBubble.replaceWith(createMessageBubble(sysMsg.content, 'system', [], null, sysMsg));
+                }
+            } catch (e) {
+                const sysMsg = { role: 'system', content: `❌ 命令异常: ${shell}> ${command}\n${e.message}`, images: [] };
+                const idx = chats[currentChat].indexOf(execMsg);
+                if (idx !== -1) chats[currentChat][idx] = sysMsg;
+                execBubble.replaceWith(createMessageBubble(sysMsg.content, 'system', [], null, sysMsg));
+            }
+        }
+        saveChatToBackend();
+        return executed;
+    }
+
+    // DeepSeek要求: 只能有一条system消息，且必须在最前面
+    function reorderMessages(msgs) {
+        const sys = msgs.filter(m => m.role === 'system');
+        const others = msgs.filter(m => m.role !== 'system');
+        if (sys.length <= 1) return [...sys, ...others];
+        return [{ role: 'system', content: sys.map(m => m.content).join('\n\n') }, ...others];
+    }
+
     async function callAPI(messages) {
-        if (!currentModel) throw new Error('未选择模型');
-        const payload = {
-            messages,
-            provider: currentProvider,
-            model: currentModel,
-            ...currentParams,
-            stream: true
-        };
-        const res = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+    if (!currentModel) throw new Error('未选择模型');
+    
+    // 生成唯一请求 ID
+    const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+    
+    const payload = {
+        messages,
+        provider: currentProvider,
+        model: currentModel,
+        ...currentParams,
+        stream: true,
+        requestId: requestId  // 👈 传给后端
+    };
+    
+    if (currentThinkMode === 'deep') payload.deep_think = true;
+    else if (currentThinkMode === 'direct' || currentThinkMode === 'reason') payload.chat_template_kwargs = { enable_thinking: false };
+
+    currentAbortController = new AbortController();
+    const controller = currentAbortController;
+
+    const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+    });
         if (!res.ok) {
             const err = await res.text();
             throw new Error(err);
@@ -1016,228 +1277,421 @@ const chatFileBtn = $('chatFileBtn'),
     }
 
     async function sendMessage(isRegenerate = false) {
-        if (streaming) return;
-        if (!currentModel) {
-            showToast('请先选择模型');
-            return;
-        }
-        if (pendingNewChatIndex !== null && currentChat === pendingNewChatIndex) {
-            try {
-                const res = await fetch('/api/chats', { method: 'POST' });
-                if (res.ok) {
-                    const data = await res.json();
-                    const realId = data.id;
-                    chats.splice(pendingNewChatIndex, 1);
-                    chatTitles.splice(pendingNewChatIndex, 1);
-                    while (chats.length <= realId) {
-                        chats.push([]);
-                        chatTitles.push('');
-                    }
-                    chats[realId] = [];
-                    chatTitles[realId] = '新对话';
-                    currentChat = realId;
-                    pendingNewChatIndex = null;
-                } else {
-                    pendingNewChatIndex = null;
-                }
-            } catch (e) {
-                pendingNewChatIndex = null;
-            }
-        }
-
-        const ta = isChatActive ? chatText : initText;
-        const target = isChatActive ? 'chat' : 'initial';
-        let userText = ta.value.trim();
-        const textFiles = activeFiles[target].filter(f => f.type === 'text');
-        const imgs = activeFiles[target].filter(f => f.type === 'image').map(f => f.content);
-
-        if (!isRegenerate && !userText && !imgs.length && !textFiles.length) return;
-
-        if (!isChatActive) {
-            await newChat();
-        }
-
-        if (!isRegenerate) {
-            let displayContent = userText || '';
-            if (!displayContent && imgs.length) {
-                displayContent = '图片';
-            }
-
-            const userMsg = {
-                role: 'user',
-                content: userText || (imgs.length ? '图片' : ''),
-                images: imgs
-            };
-            chats[currentChat].push(userMsg);
-
-            if (textFiles.length > 0) {
-                const grid = document.createElement('div');
-                grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-bottom:6px;';
-                
-                textFiles.forEach(f => {
-                    const ext = f.fileName.split('.').pop()?.toUpperCase() || 'FILE';
-                    const sizeStr = f.content ? `${ext} ${(new Blob([f.content]).size / 1024).toFixed(2)}KB` : ext;
-                    const card = document.createElement('div');
-                    card.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bubble-user);border-radius:12px;width:160px;cursor:pointer;flex-shrink:0;';
-                    card.onclick = () => openFileViewer(f.fileName, f.content);
-                    card.innerHTML = `
-            <svg width="24" height="24" viewBox="0 0 24 28" fill="none" style="flex-shrink:0;">
-                <path d="M16.5 0l7 7v15.6c0 2.25 0 3.375-.573 4.164a3 3 0 0 1-.663.663C21.475 28 20.349 28 18.1 28H5.9c-2.25 0-3.375 0-4.164-.573a3 3 0 0 1-.663-.663C.5 25.975.5 24.849.5 22.6V5.4c0-2.25 0-3.375.573-4.164a3 3 0 0 1 .663-.663C2.525 0 3.651 0 5.9 0h10.6z" fill="url(#grad-${f.fileName})"/>
-                <path d="M16.5 0l7 7h-3.8c-1.12 0-1.68 0-2.108-.218a2 2 0 0 1-.874-.874C16.5 5.48 16.5 4.92 16.5 3.8V0z" fill="#fff" fill-opacity=".55"/>
-                <path d="M6 11.784c0-.433.351-.784.784-.784h10.432a.784.784 0 1 1 0 1.568H6.784A.784.784 0 0 1 6 11.784zM6 15.784c0-.433.351-.784.784-.784h10.432a.784.784 0 1 1 0 1.568H6.784A.784.784 0 0 1 6 15.784zM6.114 19.817c0-.433.35-.784.784-.784h6.318a.784.784 0 1 1 0 1.568H6.898a.784.784 0 0 1-.784-.784z" fill="#fff"/>
-                <defs><linearGradient id="grad-${f.fileName}" x1="1.5" y1="-1" x2="23.5" y2="28"><stop stop-color="#6D93FF"/><stop offset="1" stop-color="#5A71F0"/></linearGradient></defs>
-            </svg>
-            <div style="min-width:0;flex:1;">
-                <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.fileName)}</div>
-                <div style="font-size:11px;color:var(--dsw-alias-label-secondary);">${sizeStr}</div>
-            </div>
-        `;
-                    grid.appendChild(card);
-                });
-                chatAreaInner.appendChild(grid);
-            }
-
-            addMessage(displayContent, 'user', imgs, null, userMsg);
-
-            if (textFiles.length) {
-                textFiles.forEach(f => {
-                    chats[currentChat].push({
-                        role: 'system',
-                        content: `[文件: ${f.fileName}]\n${f.content}`
-                    });
-                });
-            }
-
-            ta.value = '';
-            activeFiles[target] = [];
-            renderPreviews(isChatActive ? chatPreview : initPreview, []);
-            updateSendBtn();
-        }
-
-        streaming = true;
-        updateSendBtn();
-        const bubble = addMessage('思考中...', 'ai', [], null, null);
-        try {
-            const msgs = chats[currentChat]
-                .filter(m => m.role)
-                .map(m => ({
-                    role: m.role,
-                    content: m.content,
-                    images: m.images || []
-                }));
-            const stream = await callAPI(msgs);
-            bubble.innerHTML = '';
-            const reasoningDiv = document.createElement('div');
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'markdown-body';
-            bubble.appendChild(reasoningDiv);
-            bubble.appendChild(contentDiv);
-
-            let fullContent = '';
-            let fullReasoning = '';
-            const decoder = new TextDecoder();
-            const reader = stream.getReader();
-            let buffer = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.substring(6);
-                        if (data === '[DONE]') continue;
-                        try {
-                            const json = JSON.parse(data);
-                            const delta = json.choices?.[0]?.delta;
-                            if (delta) {
-                                if (delta.reasoning_content) {
-                                    fullReasoning += String(delta.reasoning_content);
-                                    reasoningDiv.innerHTML = createThinkBlock(fullReasoning);
-                                }
-                                if (delta.content !== undefined && delta.content !== null) {
-                                    let contentPart = '';
-                                    const c = delta.content;
-                                    
-                                    if (typeof c === 'string') {
-                                        contentPart = c;
-                                    } 
-                                    else if (Array.isArray(c)) {
-                                        for (let i = 0; i < c.length; i++) {
-                                            const item = c[i];
-                                            if (typeof item === 'string') {
-                                                contentPart += item;
-                                            } 
-                                            else if (item && typeof item === 'object') {
-                                                if (item.text) contentPart += item.text;
-                                                else if (item.value) contentPart += item.value;
-                                                else if (item.type === 'text' && item.text) contentPart += item.text;
-                                            }
-                                        }
-                                    } 
-                                    else if (typeof c === 'object' && c !== null) {
-                                        contentPart = c.text || c.value || c.content || '';
-                                        if (!contentPart && c.toString && c.toString !== Object.prototype.toString) {
-                                            const str = c.toString();
-                                            if (str && str !== '[object Object]') contentPart = str;
-                                        }
-                                    }
-                                    
-                                    if (contentPart !== undefined && contentPart !== null) {
-                                        fullContent += contentPart;
-                                    }
-                                    
-                                    if (fullContent) {
-                                        contentDiv.innerHTML = renderMarkdown(fullContent);
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                }
-                chatArea.scrollTop = chatArea.scrollHeight;
-            }
-            const assistantMsg = { role: 'assistant', content: fullContent, reasoning: fullReasoning || null };
-            chats[currentChat].push(assistantMsg);
-            const newBubble = createMessageBubble(fullContent, 'ai', [], fullReasoning, assistantMsg);
-            bubble.replaceWith(newBubble);
-            updateHistoryTitle();
-            saveChatToBackend();
-        } catch (e) {
-            bubble.innerHTML = '请求失败: ' + e.message;
-            console.error(e);
+    // 如果正在流式输出，不允许再次发送，除非是重新生成
+    if (streaming && !isRegenerate) return;
+    if (streaming && isRegenerate) {
+        // 先停止当前流
+        if (currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
         }
         streaming = false;
         updateSendBtn();
     }
 
-    initSend.onclick = () => sendMessage(false);
-    chatSend.onclick = () => sendMessage(false);
-    initText.onkeydown = e => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage(false);
-        }
-    };
-    chatText.onkeydown = e => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage(false);
-        }
-    };
+    if (!currentModel) {
+        showToast('请先选择模型');
+        return;
+    }
 
-    sidebarToggle.onclick = () => {
-        if (!sidebarLeft.classList.contains('visible')) {
-            sidebarLeft.classList.add('visible');
-            sidebarLeft.classList.remove('expanded');
-        } else if (sidebarLeft.classList.contains('visible') && !sidebarLeft.classList.contains('expanded')) {
-            sidebarLeft.classList.add('expanded');
-        } else if (sidebarLeft.classList.contains('expanded')) {
-            sidebarLeft.classList.remove('expanded');
+    // 处理新对话创建逻辑（保持原有）
+    if (pendingNewChatIndex !== null && currentChat === pendingNewChatIndex) {
+        try {
+            const res = await fetch('/api/chats', { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                const realId = data.id;
+                chats.splice(pendingNewChatIndex, 1);
+                chatTitles.splice(pendingNewChatIndex, 1);
+                while (chats.length <= realId) {
+                    chats.push([]);
+                    chatTitles.push('');
+                }
+                chats[realId] = [];
+                chatTitles[realId] = '新对话';
+                currentChat = realId;
+                pendingNewChatIndex = null;
+            } else {
+                pendingNewChatIndex = null;
+            }
+        } catch (e) {
+            pendingNewChatIndex = null;
         }
-    };
+    }
+
+    const ta = isChatActive ? chatText : initText;
+    const target = isChatActive ? 'chat' : 'initial';
+    let userText = ta.value.trim();
+    const textFiles = activeFiles[target].filter(f => f.type === 'text');
+    const imgs = activeFiles[target].filter(f => f.type === 'image').map(f => f.content);
+
+    if (!isRegenerate && !userText && !imgs.length && !textFiles.length) return;
+
+    if (!isChatActive) {
+        await newChat();
+    }
+
+    // 构建用户消息
+    if (!isRegenerate) {
+        let displayContent = userText || '';
+        if (!displayContent && imgs.length) {
+            displayContent = '图片';
+        }
+        const userMsg = {
+            role: 'user',
+            content: userText || (imgs.length ? '图片' : ''),
+            images: imgs
+        };
+        chats[currentChat].push(userMsg);
+
+        // 处理文本文件在界面上的展示（保持原有逻辑）
+        if (textFiles.length > 0) {
+            const grid = document.createElement('div');
+            grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-bottom:6px;';
+            textFiles.forEach(f => {
+                const ext = f.fileName.split('.').pop()?.toUpperCase() || 'FILE';
+                const sizeStr = f.content ? `${ext} ${(new Blob([f.content]).size / 1024).toFixed(2)}KB` : ext;
+                const card = document.createElement('div');
+                card.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bubble-user);border-radius:12px;width:160px;cursor:pointer;flex-shrink:0;';
+                card.onclick = () => openFileViewer(f.fileName, f.content);
+                card.innerHTML = `
+                    <svg width="24" height="24" viewBox="0 0 24 28" fill="none" style="flex-shrink:0;">
+                        <path d="M16.5 0l7 7v15.6c0 2.25 0 3.375-.573 4.164a3 3 0 0 1-.663.663C21.475 28 20.349 28 18.1 28H5.9c-2.25 0-3.375 0-4.164-.573a3 3 0 0 1-.663-.663C.5 25.975.5 24.849.5 22.6V5.4c0-2.25 0-3.375.573-4.164a3 3 0 0 1 .663-.663C2.525 0 3.651 0 5.9 0h10.6z" fill="url(#grad-${f.fileName})"/>
+                        <path d="M16.5 0l7 7h-3.8c-1.12 0-1.68 0-2.108-.218a2 2 0 0 1-.874-.874C16.5 5.48 16.5 4.92 16.5 3.8V0z" fill="#fff" fill-opacity=".55"/>
+                        <path d="M6 11.784c0-.433.351-.784.784-.784h10.432a.784.784 0 1 1 0 1.568H6.784A.784.784 0 0 1 6 11.784zM6 15.784c0-.433.351-.784.784-.784h10.432a.784.784 0 1 1 0 1.568H6.784A.784.784 0 0 1 6 15.784zM6.114 19.817c0-.433.35-.784.784-.784h6.318a.784.784 0 1 1 0 1.568H6.898a.784.784 0 0 1-.784-.784z" fill="#fff"/>
+                        <defs><linearGradient id="grad-${f.fileName}" x1="1.5" y1="-1" x2="23.5" y2="28"><stop stop-color="#6D93FF"/><stop offset="1" stop-color="#5A71F0"/></linearGradient></defs>
+                    </svg>
+                    <div style="min-width:0;flex:1;">
+                        <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.fileName)}</div>
+                        <div style="font-size:11px;color:var(--dsw-alias-label-secondary);">${sizeStr}</div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            chatAreaInner.appendChild(grid);
+        }
+
+        addMessage(displayContent, 'user', imgs, null, userMsg);
+
+        // 文本文件作为系统消息附加到聊天记录中
+        if (textFiles.length) {
+            textFiles.forEach(f => {
+                chats[currentChat].push({
+                    role: 'system',
+                    content: `[文件: ${f.fileName}]\n${f.content}`
+                });
+            });
+        }
+
+        // 清空输入框和附件
+        ta.value = '';
+        activeFiles[target] = [];
+        renderPreviews(isChatActive ? chatPreview : initPreview, []);
+        updateSendBtn();
+    }
+
+    // 开始流式获取
+    streaming = true;
+    updateSendBtn();
+
+    const reasonSteps = getReasonSteps();
+    const isReasonMode = false;
+
+    let fullContent = '';
+    let fullReasoning = '';
+
+    if (isReasonMode) {
+        // ===== 推理模式：三段式调用（流式，与深度思考同款样式） =====
+        const ts = Date.now();
+        const reasonContainer = document.createElement('div');
+        reasonContainer.className = 'reasoning-container';
+
+        // 为每个步骤创建 think-block 样式的可折叠块
+        for (let i = 0; i < reasonSteps.length; i++) {
+            const step = reasonSteps[i];
+            const block = document.createElement('div');
+            block.className = 'think-block';
+            block.style.margin = '2px 0';
+            block.innerHTML = `
+                <div class="think-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <div class="think-icon">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M8.00192 6.64454C8.75026 6.64454 9.35732 7.25169 9.35739 8.00001C9.35739 8.74838 8.7503 9.35548 8.00192 9.35548C7.25367 9.35533 6.64743 8.74829 6.64743 8.00001C6.6475 7.25178 7.25371 6.64468 8.00192 6.64454Z" fill="currentColor"></path>
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M9.97165 1.29981C11.5853 0.718916 13.271 0.642197 14.3144 1.68555C15.3577 2.72902 15.2811 4.41466 14.7002 6.02833C14.4707 6.66561 14.1504 7.32937 13.75 8.00001C14.1504 8.67062 14.4707 9.33444 14.7002 9.97169C15.2811 11.5854 15.3578 13.271 14.3144 14.3145C13.271 15.3579 11.5854 15.2811 9.97165 14.7002C9.3344 14.4708 8.67059 14.1505 7.99997 13.75C7.32933 14.1505 6.66558 14.4708 6.02829 14.7002C4.41461 15.2811 2.72899 15.3578 1.68552 14.3145C0.642155 13.271 0.71887 11.5854 1.29977 9.97169C1.52915 9.33454 1.84865 8.67049 2.24899 8.00001C1.84866 7.32953 1.52915 6.66544 1.29977 6.02833C0.718852 4.41459 0.64207 2.729 1.68552 1.68555C2.72897 0.642112 4.41456 0.718887 6.02829 1.29981C6.66541 1.52918 7.32949 1.8487 7.99997 2.24903C8.67045 1.84869 9.33451 1.52919 9.97165 1.29981ZM12.9404 9.2129C12.4391 9.893 11.8616 10.5681 11.2148 11.2149C10.568 11.8616 9.89296 12.4391 9.21286 12.9404C9.62532 13.1579 10.0271 13.338 10.4121 13.4766C11.9146 14.0174 12.9172 13.8738 13.3955 13.3955C13.8737 12.9173 14.0174 11.9146 13.4765 10.4121C13.3379 10.0271 13.1578 9.62535 12.9404 9.2129ZM3.05856 9.2129C2.84121 9.62523 2.66197 10.0272 2.52341 10.4121C1.98252 11.9146 2.12627 12.9172 2.60446 13.3955C3.08278 13.8737 4.08544 14.0174 5.58786 13.4766C5.97264 13.338 6.37389 13.1577 6.7861 12.9404C6.10624 12.4393 5.43168 11.8614 4.78513 11.2149C4.13823 10.5679 3.55992 9.89313 3.05856 9.2129ZM7.99899 3.792C7.23179 4.31419 6.45306 4.95512 5.70407 5.70411C4.95509 6.45309 4.31415 7.23184 3.79196 7.99903C4.3143 8.76666 4.95471 9.54653 5.70407 10.2959C6.45309 11.0449 7.23271 11.6848 7.99997 12.207C8.76725 11.6848 9.54683 11.0449 10.2959 10.2959C11.0449 9.54686 11.6848 8.76729 12.207 8.00001C11.6848 7.23275 11.0449 6.45312 10.2959 5.70411C9.5465 4.95475 8.76662 4.31434 7.99899 3.792ZM5.58786 2.52344C4.08533 1.98255 3.08272 2.12625 2.60446 2.6045C2.12621 3.08275 1.98252 4.08536 2.52341 5.5879C2.66189 5.97253 2.8414 6.37409 3.05856 6.78614C3.55983 6.10611 4.1384 5.43189 4.78513 4.78516C5.43186 4.13843 6.10606 3.55987 6.7861 3.0586C6.37405 2.84144 5.97249 2.66192 5.58786 2.52344ZM13.3955 2.6045C12.9172 2.12631 11.9146 1.98257 10.4121 2.52344C10.0272 2.66201 9.62519 2.84125 9.21286 3.0586C9.8931 3.55996 10.5679 4.13827 11.2148 4.78516C11.8614 5.43172 12.4392 6.10627 12.9404 6.78614C13.1577 6.37393 13.338 5.97267 13.4765 5.5879C14.0174 4.08549 13.8736 3.08281 13.3955 2.6045Z" fill="currentColor"></path>
+                        </svg>
+                    </div>
+                    <span>${step.label}</span>
+                    <span class="think-status" id="reason-status-${ts}-${i}">推理中...</span>
+                    <div class="think-arrow">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="think-body-wrapper">
+                    <div class="think-line"></div>
+                    <div class="think-content" id="reason-content-${ts}-${i}"></div>
+                </div>
+            `;
+            reasonContainer.appendChild(block);
+        }
+
+        const bubble = addMessage('', 'ai', [], null, null);
+        bubble.innerHTML = '';
+        bubble.style.maxWidth = '100%';
+        bubble.style.width = '100%';
+        bubble.style.background = 'transparent';
+        bubble.style.borderRadius = '0';
+        bubble.appendChild(reasonContainer);
+
+        try {
+            const msgs = chats[currentChat]
+                .filter(m => m.role)
+                .map(m => ({ role: m.role, content: m.content, images: m.images || [] }));
+
+            const stepResults = [];
+
+            for (let i = 0; i < reasonSteps.length; i++) {
+                const step = reasonSteps[i];
+                const contentDiv = document.getElementById(`reason-content-${ts}-${i}`);
+                const statusEl = document.getElementById(`reason-status-${ts}-${i}`);
+                if (contentDiv) contentDiv.innerHTML = '';
+                let stepContent = '';
+
+                // 构建消息：用户输出为 {Svotye_system} 占位符，提示词追加分析指令
+                const stepSystemPrompt = step.system_prompt + '，重点分析占位符最前一位的非系统占位符的用户输出';
+                const stepMsgs = [
+                    { role: 'system', content: stepSystemPrompt, images: [] },
+                    ...msgs.map(m => ({ ...m })),
+                    { role: 'user', content: '{Svotye_system}', images: [] },
+                ];
+                for (let j = 0; j < i; j++) {
+                    if (stepResults[j]) {
+                        stepMsgs.push({ role: 'assistant', content: stepResults[j], images: [] });
+                    }
+                }
+
+                const stream = await callAPI(stepMsgs);
+
+                const decoder = new TextDecoder();
+                const reader = stream.getReader();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.substring(6);
+                            if (data === '[DONE]') continue;
+                            try {
+                                const json = JSON.parse(data);
+                                const delta = json.choices?.[0]?.delta;
+                                if (delta && delta.content !== undefined && delta.content !== null) {
+                                    let contentPart = '';
+                                    const c = delta.content;
+                                    if (typeof c === 'string') {
+                                        contentPart = c;
+                                    } else if (Array.isArray(c)) {
+                                        for (let k = 0; k < c.length; k++) {
+                                            const item = c[k];
+                                            if (typeof item === 'string') contentPart += item;
+                                            else if (item?.text) contentPart += item.text;
+                                        }
+                                    } else if (typeof c === 'object' && c?.text) {
+                                        contentPart = c.text;
+                                    }
+                                    if (contentPart) {
+                                        stepContent += contentPart;
+                                        if (contentDiv) contentDiv.innerHTML = renderMarkdown(stepContent);
+                                    }
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                }
+
+                stepResults.push(stepContent);
+                if (contentDiv) contentDiv.innerHTML = renderMarkdown(stepContent);
+                if (statusEl) statusEl.textContent = '✓ 完成';
+            }
+
+            // 保存结果
+            const combined = stepResults.join('\n\n');
+            const assistantMsg = { role: 'assistant', content: combined, reasoning: null };
+            chats[currentChat].push(assistantMsg);
+            updateHistoryTitle();
+            saveChatToBackend();
+
+        } catch (e) {
+            if (e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') {
+                // 不做额外处理
+            } else {
+                // 标记最后一个未完成的步骤为失败
+                for (let i = 0; i < reasonSteps.length; i++) {
+                    const statusEl = document.getElementById(`reason-status-${ts}-${i}`);
+                    if (statusEl && statusEl.textContent === '推理中...') {
+                        statusEl.textContent = '❌ 失败';
+                    }
+                }
+                console.error(e);
+            }
+        } finally {
+            streaming = false;
+            currentAbortController = null;
+            updateSendBtn();
+        }
+        return;
+    }
+
+    const bubble = addMessage('思考中...', 'ai', [], null, null);
+    try {
+        const msgs = chats[currentChat]
+            .filter(m => m.role)
+            .map(m => ({
+                role: m.role,
+                content: m.content,
+                images: m.images || []
+            }));
+
+        // 告知 AI 工具能力
+        if (commandExecEnabled) {
+            const toolHint = msgs.find(m => m.role === 'system' && m.content.includes('[工具]'));
+            if (!toolHint) {
+                msgs.unshift({
+                    role: 'system',
+                    content: `[工具]\n你可以执行系统命令。格式要求——每行一个指令，PowerShell:\ntool:CommandExecution\nPower1: 要执行的命令\n\nCMD:\ntool:CommandExecution\ncmd1: 要执行的命令\n\n多条命令用编号递增: Power1, Power2... 或 cmd1, cmd2...\n工具行不会显示给用户。每个命令必须独占一行。`,
+                    images: []
+                });
+            }
+        }
+
+        // API要求所有system消息在最前面
+        const stream = await callAPI(reorderMessages(msgs));
+
+        bubble.innerHTML = '';
+        const reasoningDiv = document.createElement('div');
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'markdown-body';
+        bubble.appendChild(reasoningDiv);
+        bubble.appendChild(contentDiv);
+
+        const decoder = new TextDecoder();
+        const reader = stream.getReader();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.substring(6);
+                    if (data === '[DONE]') continue;
+                    try {
+                        const json = JSON.parse(data);
+                        const delta = json.choices?.[0]?.delta;
+                        if (delta) {
+                            if (delta.reasoning_content) {
+                                fullReasoning += String(delta.reasoning_content);
+                                reasoningDiv.innerHTML = createThinkBlock(fullReasoning);
+                            }
+                            if (delta.content !== undefined && delta.content !== null) {
+                                let contentPart = '';
+                                const c = delta.content;
+                                if (typeof c === 'string') {
+                                    contentPart = c;
+                                } else if (Array.isArray(c)) {
+                                    for (let i = 0; i < c.length; i++) {
+                                        const item = c[i];
+                                        if (typeof item === 'string') {
+                                            contentPart += item;
+                                        } else if (item && typeof item === 'object') {
+                                            if (item.text) contentPart += item.text;
+                                            else if (item.value) contentPart += item.value;
+                                            else if (item.type === 'text' && item.text) contentPart += item.text;
+                                        }
+                                    }
+                                } else if (typeof c === 'object' && c !== null) {
+                                    contentPart = c.text || c.value || c.content || '';
+                                    if (!contentPart && c.toString && c.toString !== Object.prototype.toString) {
+                                        const str = c.toString();
+                                        if (str && str !== '[object Object]') contentPart = str;
+                                    }
+                                }
+                                if (contentPart !== undefined && contentPart !== null) {
+                                    fullContent += contentPart;
+                                }
+                                if (fullContent) {
+                                    contentDiv.innerHTML = renderMarkdown(stripToolLines(fullContent) || '...');
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+            }
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        const assistantMsg = { role: 'assistant', content: fullContent, reasoning: fullReasoning || null };
+        chats[currentChat].push(assistantMsg);
+        const newBubble = createMessageBubble(fullContent, 'ai', [], fullReasoning, assistantMsg);
+        bubble.replaceWith(newBubble);
+        updateHistoryTitle();
+        saveChatToBackend();
+
+        // 解析并执行工具调用
+        if (commandExecEnabled) {
+            try { await processToolCalls(fullContent); } catch (e) { console.error('[工具调用错误]', e); }
+        }
+
+    } catch (e) {
+        if (e && (e.name === 'AbortError' || e.code === 'ERR_CANCELED')) {
+            const markdownDiv = bubble.querySelector('.markdown-body') || bubble;
+            markdownDiv.innerHTML = renderMarkdown(fullContent);
+            const assistantMsg = { role: 'assistant', content: fullContent, reasoning: fullReasoning || null };
+            chats[currentChat].push(assistantMsg);
+            updateHistoryTitle();
+            saveChatToBackend();
+            if (commandExecEnabled) {
+                try { await processToolCalls(fullContent); } catch (ex) { console.error('[工具调用错误]', ex); }
+            }
+        } else {
+            bubble.innerHTML = '';
+            const errDiv = document.createElement('div');
+            errDiv.style.cssText = 'padding:8px 0; color:#e74c3c; font-size:14px;';
+            errDiv.textContent = '请求失败: ' + e.message;
+            bubble.appendChild(errDiv);
+
+            const errorActions = document.createElement('div');
+            errorActions.className = 'message-actions';
+            errorActions.innerHTML = `<button class="action-icon" data-action="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 12-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button class="action-icon" data-action="regenerate" title="重新生成"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+        <button class="action-icon" data-action="edit" title="修改"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="action-icon" data-action="delete" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 12 2v2"/></svg></button>`;
+            bubble.appendChild(errorActions);
+
+            errorActions.querySelector('[data-action="copy"]').onclick = () =>
+                navigator.clipboard.writeText(e.message).then(() => showToast('已复制'));
+            errorActions.querySelector('[data-action="delete"]').onclick = () => { bubble.remove(); };
+            console.error(e);
+        }
+    } finally {
+        streaming = false;
+        currentAbortController = null;
+        updateSendBtn();
+    }
+}
 
     function activateChat() {
         isChatActive = true;
@@ -1276,8 +1730,9 @@ const chatFileBtn = $('chatFileBtn'),
         } else {
             if (emptyHint) emptyHint.style.display = 'none';
             chats[idx].forEach(m => {
-                if (m.role && m.role !== 'system')
-                    addMessage(m.content, m.role === 'user' ? 'user' : 'ai', m.images || [], m.reasoning, m);
+                if (!m.role) return;
+                const bubbleRole = m.role === 'system' ? 'system' : (m.role === 'user' ? 'user' : 'ai');
+                addMessage(m.content, bubbleRole, m.images || [], m.reasoning, m);
             });
         }
         updateHistoryList();
@@ -1737,10 +2192,239 @@ if (chatFileBtn) {
     };
 }
 
+const initDeepThinkBtn = document.getElementById('initialDeepThinkBtn');
+const chatDeepThinkBtn = document.getElementById('chatDeepThinkBtn');
+
+
+
+document.addEventListener('DOMContentLoaded', function() {
+    const initDeepThinkBtn = document.getElementById('initialDeepThinkBtn');
+    const chatDeepThinkBtn = document.getElementById('chatDeepThinkBtn');
+
+ if (!initDeepThinkBtn || !chatDeepThinkBtn) {
+        console.warn('深度思考按钮未找到，请检查 HTML 中的 id 是否正确');
+        return;
+    }
+
+    let currentPopup = null;
+
+    function createDeepThinkPopup(triggerBtn) {
+        const existing = document.querySelector('.deep-think-popup');
+        if (existing) {
+            existing.remove();
+            if (existing._triggerBtn === triggerBtn) { currentPopup = null; return; }
+        }
+
+        const popup = document.createElement('div');
+        popup.className = 'deep-think-popup';
+        popup._triggerBtn = triggerBtn;
+
+        // 确定当前激活的模式
+        const isDeep = currentThinkMode === 'deep';
+        const isDirect = currentThinkMode === 'direct';
+        const isReason = currentThinkMode === 'reason';
+        const isCreative = currentThinkMode === 'creative';
+
+        popup.innerHTML = `
+        <div class="deep-think-popup-inner">
+            <!-- 工具链区域 -->
+            <div class="tool-chain-section">
+                <div class="tool-chain-title">工具链</div>
+                <div class="tool-chain-item">
+                    <div class="tool-chain-item-left">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                        <span>命令执行</span>
+                    </div>
+                    <div class="tool-chain-toggle">
+                        <button class="tool-chain-option ${commandExecEnabled ? 'active' : ''}" data-tool="command" data-value="on">允许</button>
+                        <button class="tool-chain-option ${!commandExecEnabled ? 'active' : ''}" data-tool="command" data-value="off">禁用</button>
+                    </div>
+                </div>
+            </div>
+            <!-- 思考模式区域 -->
+            <div class="think-section">
+                <span class="think-section-title">深度思考</span>
+                <div class="think-mode-selector">
+                    <button class="think-mode-option ${isDeep ? 'active' : ''}" data-mode="deep">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.47V19a2 2 0 11-4 0v-.53c0-1.03-.47-1.99-1.274-2.618l-.548-.547z"/>
+                        </svg>
+                        <span>沉思</span>
+                    </button>
+                    <button class="think-mode-option ${isDirect ? 'active' : ''}" data-mode="direct">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        <span>直接</span>
+                    </button>
+                    <button class="think-mode-option ${isReason ? 'active' : ''}" data-mode="reason">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                        <span>推理</span>
+                    </button>
+                    <button class="think-mode-option ${isCreative ? 'active' : ''}" data-mode="creative">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                        </svg>
+                        <span>创意</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        `;
+
+        popup.classList.add('deep-think-popup');
+        document.body.appendChild(popup);
+
+        // 动画：先定位再播放
+        const rect = triggerBtn.getBoundingClientRect();
+        popup.style.left = (rect.left + rect.width/2 - 10) + 'px';
+        popup.style.top = (rect.top - 8) + 'px';
+        popup.style.transformOrigin = 'bottom center';
+
+        // 触发入场动画
+        requestAnimationFrame(() => {
+            popup.classList.add('active');
+            // 定位回中心
+            requestAnimationFrame(() => {
+                popup.style.left = (rect.left + rect.width/2 - popup.offsetWidth/2) + 'px';
+                popup.style.top = (rect.top - popup.offsetHeight - 8) + 'px';
+            });
+        });
+
+        // 工具链切换事件
+        popup.querySelectorAll('.tool-chain-option').forEach(option => {
+            option.addEventListener('click', () => {
+                const tool = option.dataset.tool;
+                const value = option.dataset.value;
+                if (tool === 'command') {
+                    commandExecEnabled = value === 'on';
+                    popup.querySelectorAll('.tool-chain-option[data-tool="command"]').forEach(o => {
+                        o.classList.toggle('active', o === option);
+                    });
+                    // 同步到插件
+                    if (window.CommandExecutionPlugin) {
+                        window.CommandExecutionPlugin.setEnabled(commandExecEnabled);
+                    }
+                    saveSettingsToLocal();
+                }
+            });
+        });
+
+        // 思考模式切换事件
+        popup.querySelectorAll('.think-mode-option').forEach(option => {
+            option.addEventListener('click', () => {
+                currentThinkMode = option.dataset.mode;
+                deepThinkEnabled = currentThinkMode !== 'direct';
+                popup.querySelectorAll('.think-mode-option').forEach(o => {
+                    o.classList.toggle('active', o === option);
+                });
+                saveSettingsToLocal();
+            });
+        });
+
+        const closeHandler = (e) => {
+            if (!popup.contains(e.target) && e.target !== triggerBtn) {
+                popup.classList.remove('active');
+                setTimeout(() => {
+                    popup.remove();
+                    currentPopup = null;
+                }, 200);
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeHandler), 10);
+        currentPopup = popup;
+    }
+
+    initDeepThinkBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        createDeepThinkPopup(initDeepThinkBtn);
+    });
+    chatDeepThinkBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        createDeepThinkPopup(chatDeepThinkBtn);
+    });
+});
+
+function stopStreaming() {
+    if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+        // streaming 状态会在流读取中断后自动置为 false，但保险可以提前设
+        streaming = false;
+        updateSendBtn();
+    }
+}
+
+        initSend.onclick = () => {
+    if (streaming) {
+        if (currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+        }
+    } else {
+        sendMessage(false);
+    }
+};
+chatSend.onclick = () => {
+    if (streaming) {
+        if (currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+        }
+    } else {
+        sendMessage(false);
+    }
+};
+        // ----- 覆盖键盘事件（Enter 时若正在流式则不发送） -----
+        if (initText) {
+            initText.onkeydown = e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!streaming) sendMessage(false);
+                }
+            };
+        }
+        if (chatText) {
+            chatText.onkeydown = e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!streaming) sendMessage(false);
+                }
+            };
+        }
+
+if (sidebarToggle) {
+    sidebarToggle.onclick = () => {
+        if (!sidebarLeft.classList.contains('visible')) {
+            sidebarLeft.classList.add('visible');
+            sidebarLeft.classList.remove('expanded');
+        } else if (sidebarLeft.classList.contains('visible') && !sidebarLeft.classList.contains('expanded')) {
+            sidebarLeft.classList.add('expanded');
+        } else if (sidebarLeft.classList.contains('expanded')) {
+            sidebarLeft.classList.remove('expanded');
+        }
+    };
+}
+
     // 启动初始化
+    // 加载保存的设置
+    loadSettings();
+
+    // 初始化命令执行插件状态
+    if (window.CommandExecutionPlugin) {
+        window.CommandExecutionPlugin.setEnabled(commandExecEnabled);
+        window.CommandExecutionPlugin.setConfirmBeforeExecution(commandConfirmEnabled);
+    }
+
     (async () => {
         await loadProviders();
         await loadConfigFromBackend();
+        await loadConfigPrompts();
         await loadChatsFromBackend();
         updateModelButtonLabels();
         updateHistoryList();

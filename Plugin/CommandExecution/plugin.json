@@ -1,0 +1,18 @@
+{
+  "id": "CommandExecution",
+  "name": "命令执行",
+  "version": "1.0.0",
+  "description": "允许AI模型执行PowerShell和CMD命令，在执行前会向用户确认",
+  "author": "Fold.AI",
+  "official": true,
+  "type": "tool",
+  "entry": "index.js",
+  "permissions": ["command"],
+  "settings": {
+    "enabled": false,
+    "confirm_before_execution": true,
+    "allowed_shells": ["powershell", "cmd"],
+    "timeout": 30000,
+    "working_directory": "D:\\claude"
+  }
+}

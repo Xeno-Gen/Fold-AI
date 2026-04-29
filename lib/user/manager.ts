@@ -4,6 +4,23 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 const DATA_DIR = path.join(__dirname, '../../data/users');
+const ENV_PATH = path.join(__dirname, '../../config/.env');
+
+// 从 .env 读取默认系统提示词
+function getDefaultSystemPrompt(): string {
+    try {
+        if (fs.existsSync(ENV_PATH)) {
+            const content = fs.readFileSync(ENV_PATH, 'utf-8');
+            for (const line of content.split(/\r?\n/)) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('SYSTEM=')) {
+                    return trimmed.substring(7).trim();
+                }
+            }
+        }
+    } catch (e) {}
+    return '';
+}
 
 export interface UserConfig {
     defaultParams: {
@@ -45,7 +62,7 @@ function ensureUserDir(userToken: string) {
             customPort: 8080,
             providerKeys: {},
             selectedKeyIndices: {},
-            systemPrompt: '',
+            systemPrompt: getDefaultSystemPrompt(),
         };
         fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
     }
