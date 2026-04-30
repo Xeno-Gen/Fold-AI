@@ -4,8 +4,9 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { parseEnv } from '../lib/parser/envparser';
-import { chatRouter } from '../lib/routes/chat';
+import { chatRouter, setSystemVersion } from '../lib/routes/chat';
 import { configRouter } from '../lib/routes/config';
 import { providersRouter, setProviders } from '../lib/routes/providers';
 import { chatsRouter } from '../lib/routes/chats';
@@ -15,6 +16,7 @@ import { uploadRouter } from '../lib/routes/upload';
 import { downloadRouter } from '../lib/routes/download';
 import { storageRouter } from '../lib/routes/storage';
 import { pluginsRouter } from '../lib/routes/plugins';
+import { logger } from '../lib/logger';
 
 const envPath = path.join(__dirname, '../config/.env');
 const envContent = fs.readFileSync(envPath, 'utf-8');
@@ -42,9 +44,16 @@ providerIds.forEach(id => {
     const url = envData[id + '_URL'] || '';
     const modelsUrl = envData[id + '_MODELS_URL'] || '';
     const icon = envData[id + '_ICON'] || '';
-    providers.push({ id, name, url, modelsUrl, icon });
+    const chatFormat = envData[id + '_CHAT_FORMAT'] || 'OpenAI';
+    const anthropicUrl = envData[id + '_ANTHROPIC'] || '';
+    providers.push({ id, name, url, modelsUrl, icon, chatFormat, anthropicUrl });
 });
 setProviders(providers);
+
+// 检测系统版本并注入
+const sysVersion = `${os.type()} ${os.release()} (${os.arch()})`;
+setSystemVersion(sysVersion);
+logger.info('System version: ' + sysVersion);
 
 const app = express();
 const PORT = parseInt(envData.POST) || 3000;
@@ -79,10 +88,10 @@ const dirs = [
 dirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
-        console.log('已创建文件夹:', dir);
+        logger.info('created dir: ' + dir);
     }
 });
 
 app.listen(PORT, envData.LISTEN || '0.0.0.0', () => {
-    console.log(`Fold.AI server running on http://${envData.LISTEN || '0.0.0.0'}:${PORT}`);
+    logger.info(`Fold.AI server running on http://${envData.LISTEN || '0.0.0.0'}:${PORT}`);
 });

@@ -37,7 +37,8 @@ export interface UserConfig {
     customPort: number;
     providerKeys: Record<string, string[]>;
     selectedKeyIndices: Record<string, number>;
-    systemPrompt: string;   // 新增
+    systemPrompt: string;
+    chatFormat: string;
 }
 
 function ensureUserDir(userToken: string) {
@@ -63,6 +64,7 @@ function ensureUserDir(userToken: string) {
             providerKeys: {},
             selectedKeyIndices: {},
             systemPrompt: getDefaultSystemPrompt(),
+            chatFormat: '',
         };
         fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
     }
@@ -76,6 +78,7 @@ export function getUserConfig(userToken: string): UserConfig {
         if (!data.selectedKeyIndices) data.selectedKeyIndices = {};
         if (data.customPort === undefined) data.customPort = 8080;
         if (data.systemPrompt === undefined) data.systemPrompt = '';
+        if (data.chatFormat === undefined) data.chatFormat = '';
         for (const key of Object.keys(data.providerKeys)) {
             if (typeof data.providerKeys[key] === 'string') {
                 data.providerKeys[key] = [data.providerKeys[key]];

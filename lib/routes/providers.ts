@@ -8,8 +8,12 @@ export function setProviders(list: any[]) {
     providersList = list;
 }
 
+export function getProviders(): any[] {
+    return providersList;
+}
+
 providersRouter.get('/providers', (_req: Request, res: Response) => {
-    const safeList = providersList.map(p => ({ id: p.id, name: p.name, icon: p.icon }));
+    const safeList = providersList.map(p => ({ id: p.id, name: p.name, icon: p.icon, chatFormat: p.chatFormat, anthropicUrl: p.anthropicUrl }));
     res.json({ providers: safeList });
 });
 

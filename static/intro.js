@@ -4,7 +4,7 @@ window.showToast = function(msg) {
     if (!toastEl) return;
     toastEl.textContent = msg;
     toastEl.style.opacity = '1';
-    setTimeout(() => { toastEl.style.opacity = '0'; }, 2200);
+    setTimeout(() => { toastEl.style.opacity = '0'; }, 4000);
 };
 
 // 暴露存储代码块到库的全局函数
@@ -37,6 +37,34 @@ window.saveCodeBlockToStorage = async function(code, lang) {
     } catch (err) {
         window.showToast(`保存失败: ${err.message}`);
         console.error(err);
+    }
+};
+
+// 保存文本并显示：先存到存储库，再打开文件查看面板
+window.saveAndShowText = async function(prefix, text) {
+    const showInViewer = (title, content) => {
+        const t = document.getElementById('fileViewerTitle');
+        const b = document.getElementById('fileViewerBody');
+        const o = document.getElementById('fileViewerOverlay');
+        if (t) t.textContent = title;
+        if (b) b.textContent = content;
+        if (o) o.classList.add('active');
+    };
+
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    const filename = `${prefix}_${timestamp}_${random}.txt`;
+    const file = new File([text], filename, { type: 'text/plain;charset=utf-8' });
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/storage/upload', { method: 'POST', body: formData });
+        if (!res.ok) throw new Error(`保存失败 (${res.status})`);
+        window.showToast(`已保存: ${filename}`);
+        showInViewer(filename, text);
+    } catch (err) {
+        window.showToast('存储失败，仅显示内容');
+        showInViewer(prefix, text);
     }
 };
 
@@ -92,7 +120,8 @@ window.saveCodeBlockToStorage = async function(code, lang) {
 const filePanelOverlay = $('filePanelOverlay'),
     filePanelBody = $('filePanelBody'),
     filePanelClose = $('filePanelClose'),
-    filePanelTabs = $('filePanelTabs');
+    filePanelTabs = $('filePanelTabs'),
+    filePanelTitle = $('filePanelTitle');
 const chatFileBtn = $('chatFileBtn'),
     initialFileBtn = $('initialFileBtn');
 
@@ -101,6 +130,8 @@ const chatFileBtn = $('chatFileBtn'),
     let deepThinkEnabled = false;
     let currentThinkMode = 'direct'; // 'deep' | 'direct' | 'reason' | 'creative'
     let commandExecEnabled = false;
+    let chainOfThoughtEnabled = false;
+    let appendOutputEnabled = false;
     let commandConfirmEnabled = true;
     let currentTheme = 'system'; // 'light' | 'dark' | 'system'
     let chats = [[]],
@@ -111,6 +142,7 @@ const chatFileBtn = $('chatFileBtn'),
     let isUserScrolledAway = false;
     let currentAbortController = null;
     let currentProvider = null;
+    let currentChatFormat = 'OpenAI';
     let currentModel = 'deepseek-v4-flash';
     let currentParams = {
         temperature: 0.7,
@@ -148,6 +180,8 @@ const chatFileBtn = $('chatFileBtn'),
                 currentTheme = s.theme || 'system';
                 commandConfirmEnabled = s.commandConfirm !== undefined ? s.commandConfirm : true;
                 commandExecEnabled = s.commandExecEnabled || false;
+                chainOfThoughtEnabled = s.chainOfThoughtEnabled || false;
+                appendOutputEnabled = s.appendOutputEnabled || false;
                 currentThinkMode = s.thinkMode || 'direct';
                 deepThinkEnabled = s.deepThink || false;
             }
@@ -161,6 +195,8 @@ const chatFileBtn = $('chatFileBtn'),
                 theme: currentTheme,
                 commandConfirm: commandConfirmEnabled,
                 commandExecEnabled: commandExecEnabled,
+                chainOfThoughtEnabled: chainOfThoughtEnabled,
+                appendOutputEnabled: appendOutputEnabled,
                 thinkMode: currentThinkMode,
                 deepThink: deepThinkEnabled
             }));
@@ -519,7 +555,8 @@ const chatFileBtn = $('chatFileBtn'),
                     currentProvider,
                     currentModel,
                     customPort,
-                    systemPrompt: currentParams.systemPrompt
+                    systemPrompt: currentParams.systemPrompt,
+                    chatFormat: currentChatFormat
                 })
             });
         } catch (e) {}
@@ -535,6 +572,11 @@ const chatFileBtn = $('chatFileBtn'),
             if (data.currentModel) currentModel = data.currentModel;
             if (data.customPort !== undefined) customPort = data.customPort;
             if (data.systemPrompt !== undefined) currentParams.systemPrompt = data.systemPrompt;
+            if (data.chatFormat) {
+                currentChatFormat = data.chatFormat;
+            } else {
+                updateChatFormatFromProvider();
+            }
             updateModelButtonLabels();
         } catch (e) {}
     }
@@ -579,8 +621,27 @@ const chatFileBtn = $('chatFileBtn'),
             if (providers.length && !currentProvider) {
                 currentProvider = providers[0].id;
             }
+            // 设置默认 chatFormat
+            updateChatFormatFromProvider();
             if (currentProvider) await loadModels(currentProvider);
         } catch (e) {}
+    }
+
+    // 获取当前提供商的可用格式列表
+    function getAvailableFormats() {
+        const p = providers.find(p => p.id === currentProvider);
+        if (!p || !p.chatFormat) return ['OpenAI'];
+        return p.chatFormat.split(',').map(s => s.trim());
+    }
+
+    // 根据当前提供商更新 chatFormat
+    function updateChatFormatFromProvider() {
+        const formats = getAvailableFormats();
+        if (formats.length === 1) {
+            currentChatFormat = formats[0];
+        } else if (formats.length > 1 && !formats.includes(currentChatFormat)) {
+            currentChatFormat = formats[0];
+        }
     }
 
     async function loadModels(providerId) {
@@ -659,7 +720,24 @@ const chatFileBtn = $('chatFileBtn'),
                 <div class="provider-name">${p.name}</div>
             </div>`;
         });
-        html += '</div><div class="section-title" style="margin-top:10px;">API 密钥</div>';
+        html += '</div>';
+
+        // 格式切换
+        const formats = getAvailableFormats();
+        if (formats.length > 1) {
+            html += '<div style="margin: 16px 0 20px;">';
+            html += '<div class="section-title" style="margin-bottom:10px;">API 格式</div>';
+            html += '<div class="think-mode-selector" id="chatFormatSelector" style="display:inline-flex;">';
+            formats.forEach(f => {
+                html += `<button class="think-mode-option${currentChatFormat === f ? ' active' : ''}" data-format="${f}">${f === 'OpenAI' ? 'OpenAI' : 'Anthropic'}</button>`;
+            });
+            html += '</div></div>';
+        } else {
+            // 只有一种格式，固定显示
+            html += `<div style="margin: 16px 0 20px;"><div class="section-title" style="margin-bottom:6px;">API 格式</div><div style="font-size:13px;color:#888;">${formats[0]}</div></div>`;
+        }
+
+        html += '<div class="section-title" style="margin-top:10px;">API 密钥</div>';
         html +=
             '<div class="key-input-row"><input type="password" id="newKeyInput" placeholder="输入新的 API Key..."><button id="addKeyBtn">添加</button></div>';
         html += '<div class="key-list" id="keyListContainer"></div>';
@@ -709,11 +787,27 @@ const chatFileBtn = $('chatFileBtn'),
                 drawerBody.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
                 card.classList.add('active');
                 currentProvider = card.dataset.id;
+                updateChatFormatFromProvider();
                 await loadModels(currentProvider);
                 saveConfigToBackend();
                 await refreshKeyList();
+                // 重新渲染 drawer 以更新格式选择器
+                renderDrawer();
             };
         });
+
+        // 格式切换事件
+        const formatSelector = document.getElementById('chatFormatSelector');
+        if (formatSelector) {
+            formatSelector.querySelectorAll('.think-mode-option').forEach(btn => {
+                btn.onclick = () => {
+                    formatSelector.querySelectorAll('.think-mode-option').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentChatFormat = btn.dataset.format;
+                    saveConfigToBackend();
+                };
+            });
+        }
         $('addKeyBtn').onclick = async () => {
             const inp = $('newKeyInput');
             if (!inp || !inp.value.trim()) { showToast('请输入密钥'); return; }
@@ -858,24 +952,20 @@ const chatFileBtn = $('chatFileBtn'),
                 var langSpan = wrapper && wrapper.querySelector('.d813de27');
                 var lang = langSpan ? langSpan.textContent.trim() : 'txt';
                 if(codeEl && codeEl.textContent) {
-                    fetch('/api/download', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ code: codeEl.textContent, lang: lang })
-                    })
-                    .then(function(res){ if(!res.ok) throw new Error('下载失败'); return res.blob(); })
-                    .then(function(blob){
-                        var url = URL.createObjectURL(blob);
+                    try {
+                        var blob = new Blob([codeEl.textContent], { type: 'text/plain;charset=utf-8' });
+                        var url = (window.URL || window.webkitURL).createObjectURL(blob);
                         var a = document.createElement('a');
                         a.href = url;
-                        a.download = '';
+                        a.download = 'code.' + (lang || 'txt');
                         document.body.appendChild(a);
                         a.click();
-                        URL.revokeObjectURL(url);
+                        (window.URL || window.webkitURL).revokeObjectURL(url);
                         a.remove();
                         window.showToast('下载完成');
-                    })
-                    .catch(function(err){ window.showToast('❌ 下载失败: ' + err.message); });
+                    } catch(err) {
+                        window.showToast('❌ 下载失败: ' + err.message);
+                    }
                 } else { window.showToast('❌ 无法获取代码'); }
             })(this)">
                 <div class="ds-icon ds-atom-button__icon" style="font-size:16px;width:16px;height:16px;margin-right:3px;">
@@ -885,15 +975,26 @@ const chatFileBtn = $('chatFileBtn'),
                 </div>
                 <span>下载</span>
             </button>
-            <!-- 运行按钮（仅 JavaScript 安全运行） -->
+            <!-- 运行按钮 -->
             <button class="ds-atom-button ds-text-button ds-text-button--with-icon" style="margin-right: 4px;" onclick="(function(btn){
                 var wrapper = btn.closest('._121d384');
                 var pre = wrapper && wrapper.nextElementSibling;
                 var codeEl = pre && pre.querySelector('code');
+                var langSpan = wrapper && wrapper.querySelector('.d813de27');
+                var lang = langSpan ? langSpan.textContent.trim().toLowerCase() : '';
                 if(codeEl && codeEl.textContent) {
                     try {
-                        eval(codeEl.textContent);
-                        window.showToast('运行成功');
+                        if (lang === 'javascript' || lang === 'js') {
+                            eval(codeEl.textContent);
+                            window.showToast('运行成功');
+                        } else if (lang === 'html') {
+                            var blob = new Blob([codeEl.textContent], { type: 'text/html' });
+                            var url = (window.URL || window.webkitURL).createObjectURL(blob);
+                            window.open(url);
+                            window.showToast('已打开 HTML 页面');
+                        } else {
+                            window.showToast('⚠️ 仅支持 JavaScript / HTML 代码运行');
+                        }
                     } catch(err) {
                         window.showToast('❌ 运行错误: ' + err.message);
                     }
@@ -962,7 +1063,7 @@ const chatFileBtn = $('chatFileBtn'),
     </div>`;
     }
 
-    function createMessageBubble(content, role, images = [], reasoning = null, msgRef = null) {
+    function createMessageBubble(content, role, images = [], reasoning = null, msgRef = null, cotHtml = '') {
         const bubble = document.createElement('div');
         const roleClass = role === 'system' ? 'system' : (role === 'user' ? 'user' : 'ai');
         bubble.className = 'message-bubble message-' + roleClass;
@@ -975,7 +1076,7 @@ const chatFileBtn = $('chatFileBtn'),
         } else {
             contentHtml = `<div class="markdown-body">${escapeHtml(content).replace(/\n/g, '<br>')}</div>`;
         }
-        bubble.innerHTML = reasoningHtml + contentHtml;
+        bubble.innerHTML = cotHtml + reasoningHtml + contentHtml;
 
         if (images && images.length) {
             const imgContainer = document.createElement('div');
@@ -1003,7 +1104,9 @@ const chatFileBtn = $('chatFileBtn'),
             actionsDiv.innerHTML = `<button class="action-icon" data-action="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 12-2h9a2 2 0 0 1 2 2v1"/></svg></button>
         <button class="action-icon" data-action="regenerate" title="重新生成"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
         <button class="action-icon" data-action="edit" title="修改"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-        <button class="action-icon" data-action="delete" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 12 2v2"/></svg></button>`;
+        <button class="action-icon" data-action="delete" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 12 2v2"/></svg></button>
+        <button class="action-icon" data-action="tokens" title="Token消耗"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+        <button class="action-icon" data-action="apijson" title="API请求JSON"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>`;
         }
         bubble.appendChild(actionsDiv);
 
@@ -1139,6 +1242,42 @@ const chatFileBtn = $('chatFileBtn'),
                     }
                 };
             };
+
+            // Token 消耗按钮
+            const tokensBtn = actionsDiv.querySelector('[data-action="tokens"]');
+            if (tokensBtn) tokensBtn.onclick = () => {
+                const tokenData = msgRef?.usage;
+                if (!tokenData) {
+                    showToast('此消息没有 Token 消耗数据');
+                    return;
+                }
+                const inputTokens = tokenData.prompt_tokens || tokenData.input_tokens || 0;
+                const outputTokens = tokenData.completion_tokens || tokenData.output_tokens || 0;
+                const totalTokens = tokenData.total_tokens || (inputTokens + outputTokens);
+                const text = `Token 消耗详情\n\n输入 Token (prompt): ${inputTokens}\n输出 Token (completion): ${outputTokens}\n总计 Token: ${totalTokens}\n\n模型: ${currentModel}\n时间: ${new Date().toLocaleString()}`;
+                if (window.saveAndShowText) {
+                    window.saveAndShowText('token_usage', text);
+                } else {
+                    openFileViewer('Token 消耗', text);
+                }
+            };
+
+            // API 请求 JSON 按钮
+            const apijsonBtn = actionsDiv.querySelector('[data-action="apijson"]');
+            if (apijsonBtn) apijsonBtn.onclick = () => {
+                const reqData = msgRef?.apiRequest;
+                if (!reqData) {
+                    showToast('此消息没有 API 请求数据');
+                    return;
+                }
+                const jsonStr = JSON.stringify(reqData, null, 2);
+                const text = `API 请求 JSON\n\n模型: ${currentModel}\n提供商: ${currentProvider}\n格式: ${currentChatFormat}\n时间: ${new Date().toLocaleString()}\n\n${jsonStr}`;
+                if (window.saveAndShowText) {
+                    window.saveAndShowText('api_request', text);
+                } else {
+                    openFileViewer('API 请求 JSON', text);
+                }
+            };
         }
 
         return bubble;
@@ -1153,12 +1292,14 @@ const chatFileBtn = $('chatFileBtn'),
         return bubble;
     }
 
-    // 过滤工具调用行（不显示给用户）
+    // 过滤工具调用行和思维链结束标记（不显示给用户）
     function stripToolLines(text) {
-        return text.split('\n')
+        let t = text.replace(/\[判断需求\][\s\S]*?\[处理需求\]/g, '');
+        t = t.replace(/^Output:end$/gm, '');
+        return t.split('\n')
             .filter(l => {
-                const t = l.trim();
-                return !t.startsWith('tool:') && !/^(Power\d+|cmd\d+):/i.test(t);
+                const trim = l.trim();
+                return !trim.startsWith('tool:') && !/^(Power\d+|cmd\d+):/i.test(trim);
             })
             .join('\n')
             .trim();
@@ -1245,19 +1386,20 @@ const chatFileBtn = $('chatFileBtn'),
 
     async function callAPI(messages) {
     if (!currentModel) throw new Error('未选择模型');
-    
+
     // 生成唯一请求 ID
     const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
-    
+
     const payload = {
         messages,
         provider: currentProvider,
         model: currentModel,
+        chatFormat: currentChatFormat,
         ...currentParams,
         stream: true,
         requestId: requestId  // 👈 传给后端
     };
-    
+
     if (currentThinkMode === 'deep') payload.deep_think = true;
     else if (currentThinkMode === 'direct' || currentThinkMode === 'reason') payload.chat_template_kwargs = { enable_thinking: false };
 
@@ -1274,7 +1416,7 @@ const chatFileBtn = $('chatFileBtn'),
             const err = await res.text();
             throw new Error(err);
         }
-        return res.body;
+        return { body: res.body, apiRequest: payload };
     }
 
     async function sendMessage(isRegenerate = false) {
@@ -1344,6 +1486,7 @@ const chatFileBtn = $('chatFileBtn'),
             images: imgs
         };
         chats[currentChat].push(userMsg);
+        saveChatToBackend();
 
         // 处理文本文件在界面上的展示（保持原有逻辑）
         if (textFiles.length > 0) {
@@ -1473,7 +1616,8 @@ const chatFileBtn = $('chatFileBtn'),
                     }
                 }
 
-                const stream = await callAPI(stepMsgs);
+                const callResult = await callAPI(stepMsgs);
+                const stream = callResult.body;
 
                 const decoder = new TextDecoder();
                 const reader = stream.getReader();
@@ -1564,20 +1708,117 @@ const chatFileBtn = $('chatFileBtn'),
 
         // 告知 AI 工具能力
         if (commandExecEnabled) {
-            const toolHint = msgs.find(m => m.role === 'system' && m.content.includes('[工具]'));
+            const toolHint = msgs.find(m => m.role === 'system' && m.content.includes('[工具调用能力]'));
             if (!toolHint) {
                 msgs.unshift({
                     role: 'system',
-                    content: `[工具]\n你可以执行系统命令。格式要求——每行一个指令，PowerShell:\ntool:CommandExecution\nPower1: 要执行的命令\n\nCMD:\ntool:CommandExecution\ncmd1: 要执行的命令\n\n多条命令用编号递增: Power1, Power2... 或 cmd1, cmd2...\n工具行不会显示给用户。每个命令必须独占一行。`,
+                    content: `[工具调用能力]\n你可以主动调用系统命令执行工具来完成用户的需求。\n\n调用格式:\ntool:CommandExecution\nPower1:具体的PowerShell命令\n或\ncmd1:具体的CMD命令\n\n多条命令用递增编号:Power1,Power2... 或 cmd1,cmd2...\n命令会按编号顺序执行。\n在执行前系统会自动进行安全检查。\n\n用户看不到这些工具调用指令，请在需要时主动使用。`,
                     images: []
                 });
             }
         }
 
-        // API要求所有system消息在最前面
-        const stream = await callAPI(reorderMessages(msgs));
+        // 告知 AI 追加输出能力
+        if (appendOutputEnabled) {
+            const appendHint = msgs.find(m => m.role === 'system' && m.content.includes('[追加输出]'));
+            if (!appendHint) {
+                msgs.unshift({
+                    role: 'system',
+                    content: `[追加输出]\n你可以使用 {Svotye_system} 占位符来分段追加输出。\n\n当一次输出因长度限制需要继续时，在输出的末尾加上 {Svotye_system} 标记。\n系统会自动将用户消息替换为占位符，让你从上次结束的地方继续输出。\n\n使用方式：在输出末尾单独一行写上 {Svotye_system}\n系统会自动追加后续输出，最多可追加3次。`,
+                    images: []
+                });
+            }
+        }
 
-        bubble.innerHTML = '';
+        let cotAnalysisHtml = '';
+        let cotAnalysisText = '';
+
+        if (chainOfThoughtEnabled) {
+            try {
+                const userMsgs = msgs.filter(m => m.role === 'user').slice(-2);
+                const ph1Body = {
+                    messages: [
+                        { role: 'system', content: '判断需求:分析用户需求需几步,每步细节,100字内。直接输出分析。', images: [] },
+                        ...userMsgs
+                    ],
+                    provider: currentProvider,
+                    model: currentModel,
+                    chatFormat: currentChatFormat,
+                    max_tokens: 200,
+                    temperature: 0.3,
+                    stream: true
+                };
+                if (currentThinkMode === 'deep') ph1Body.deep_think = true;
+                const ph1Res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ph1Body)
+                });
+                if (ph1Res.ok) {
+                    const cotBlockStart = `<div class="think-block" style="margin-left: -12px;">
+                        <div class="think-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                            <div class="think-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8.00192 6.64454C8.75026 6.64454 9.35732 7.25169 9.35739 8.00001C9.35739 8.74838 8.7503 9.35548 8.00192 9.35548C7.25367 9.35533 6.64743 8.74829 6.64743 8.00001C6.6475 7.25178 7.25371 6.64468 8.00192 6.64454Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M9.97165 1.29981C11.5853 0.718916 13.271 0.642197 14.3144 1.68555C15.3577 2.72902 15.2811 4.41466 14.7002 6.02833C14.4707 6.66561 14.1504 7.32937 13.75 8.00001C14.1504 8.67062 14.4707 9.33444 14.7002 9.97169C15.2811 11.5854 15.3578 13.271 14.3144 14.3145C13.271 15.3579 11.5854 15.2811 9.97165 14.7002C9.3344 14.4708 8.67059 14.1505 7.99997 13.75C7.32933 14.1505 6.66558 14.4708 6.02829 14.7002C4.41461 15.2811 2.72899 15.3578 1.68552 14.3145C0.642155 13.271 0.71887 11.5854 1.29977 9.97169C1.52915 9.33454 1.84865 8.67049 2.24899 8.00001C1.84866 7.32953 1.52915 6.66544 1.29977 6.02833C0.718852 4.41459 0.64207 2.729 1.68552 1.68555C2.72897 0.642112 4.41456 0.718887 6.02829 1.29981C6.66541 1.52918 7.32949 1.8487 7.99997 2.24903C8.67045 1.84869 9.33451 1.52919 9.97165 1.29981ZM12.9404 9.2129C12.4391 9.893 11.8616 10.5681 11.2148 11.2149C10.568 11.8616 9.89296 12.4391 9.21286 12.9404C9.62532 13.1579 10.0271 13.338 10.4121 13.4766C11.9146 14.0174 12.9172 13.8738 13.3955 13.3955C13.8737 12.9173 14.0174 11.9146 13.4765 10.4121C13.3379 10.0271 13.1578 9.62535 12.9404 9.2129ZM3.05856 9.2129C2.84121 9.62523 2.66197 10.0272 2.52341 10.4121C1.98252 11.9146 2.12627 12.9172 2.60446 13.3955C3.08278 13.8737 4.08544 14.0174 5.58786 13.4766C5.97264 13.338 6.37389 13.1577 6.7861 12.9404C6.10624 12.4393 5.43168 11.8614 4.78513 11.2149C4.13823 10.5679 3.55992 9.89313 3.05856 9.2129ZM7.99899 3.792C7.23179 4.31419 6.45306 4.95512 5.70407 5.70411C4.95509 6.45309 4.31415 7.23184 3.79196 7.99903C4.3143 8.76666 4.95471 9.54653 5.70407 10.2959C6.45309 11.0449 7.23271 11.6848 7.99997 12.207C8.76725 11.6848 9.54683 11.0449 10.2959 10.2959C11.0449 9.54686 11.6848 8.76729 12.207 8.00001C11.6848 7.23275 11.0449 6.45312 10.2959 5.70411C9.5465 4.95475 8.76662 4.31434 7.99899 3.792ZM5.58786 2.52344C4.08533 1.98255 3.08272 2.12625 2.60446 2.6045C2.12621 3.08275 1.98252 4.08536 2.52341 5.5879C2.66189 5.97253 2.8414 6.37409 3.05856 6.78614C3.55983 6.10611 4.1384 5.43189 4.78513 4.78516C5.43186 4.13843 6.10606 3.55987 6.7861 3.0586C6.37405 2.84144 5.97249 2.66192 5.58786 2.52344ZM13.3955 2.6045C12.9172 2.12631 11.9146 1.98257 10.4121 2.52344C10.0272 2.66201 9.62519 2.84125 9.21286 3.0586C9.8931 3.55996 10.5679 4.13827 11.2148 4.78516C11.8614 5.43172 12.4392 6.10627 12.9404 6.78614C13.1577 6.37393 13.338 5.97267 13.4765 5.5879C14.0174 4.08549 13.8736 3.08281 13.3955 2.6045Z" fill="currentColor"/></svg>
+                            </div>
+                            <span>思维链分析</span>
+                            <div class="think-arrow"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z" fill="currentColor"/></svg></div>
+                        </div>
+                        <div class="think-body-wrapper">
+                            <div class="think-line"></div>
+                            <div class="think-content" id="cot-stream-content"></div>
+                        </div>
+                    </div>`;
+                    bubble.innerHTML = cotBlockStart + '<div class="markdown-body">处理中...</div>';
+
+                    const ph1Reader = ph1Res.body.getReader();
+                    const ph1Decoder = new TextDecoder();
+                    let ph1Buffer = '';
+
+                    while (true) {
+                        const { done, value } = await ph1Reader.read();
+                        if (done) break;
+                        ph1Buffer += ph1Decoder.decode(value, { stream: true });
+                        const lines = ph1Buffer.split('\n');
+                        ph1Buffer = lines.pop() || '';
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.substring(6);
+                                if (data === '[DONE]') continue;
+                                try {
+                                    const json = JSON.parse(data);
+                                    const delta = json.choices?.[0]?.delta;
+                                    if (delta?.content) {
+                                        cotAnalysisText += String(delta.content);
+                                        const el = document.getElementById('cot-stream-content');
+                                        if (el) el.innerHTML = cotAnalysisText.replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                    }
+                                } catch (e) {}
+                            }
+                        }
+                    }
+
+                    if (cotAnalysisText) {
+                        const escaped = cotAnalysisText.replace(/\n/g, '<br>').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        cotAnalysisHtml = cotBlockStart.replace(
+                            '<div class="think-content" id="cot-stream-content"></div>',
+                            '<div class="think-content">' + escaped + '</div>'
+                        );
+                        msgs.unshift({
+                            role: 'system',
+                            content: `[思维链]\n分析结果:${cotAnalysisText}\n\n处理需求:自主处理用户需求,可调工具。完成输出:Output:end`,
+                            images: []
+                        });
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // API要求所有system消息在最前面
+        const callResult = await callAPI(reorderMessages(msgs));
+        const stream = callResult.body;
+        const apiRequest = callResult.apiRequest;
+
+        bubble.innerHTML = cotAnalysisHtml;
         const reasoningDiv = document.createElement('div');
         const contentDiv = document.createElement('div');
         contentDiv.className = 'markdown-body';
@@ -1587,6 +1828,7 @@ const chatFileBtn = $('chatFileBtn'),
         const decoder = new TextDecoder();
         const reader = stream.getReader();
         let buffer = '';
+        let streamUsage = null;
 
         while (true) {
             const { done, value } = await reader.read();
@@ -1602,6 +1844,15 @@ const chatFileBtn = $('chatFileBtn'),
                     if (data === '[DONE]') continue;
                     try {
                         const json = JSON.parse(data);
+                        // 捕获后端发送的独立 usage 事件
+                        if (json.usage && !json.choices) {
+                            streamUsage = json.usage;
+                            continue;
+                        }
+                        // 捕获 OpenAI 流式 chunk 中的 usage
+                        if (json.usage) {
+                            streamUsage = json.usage;
+                        }
                         const delta = json.choices?.[0]?.delta;
                         if (delta) {
                             if (delta.reasoning_content) {
@@ -1645,9 +1896,15 @@ const chatFileBtn = $('chatFileBtn'),
             if (!isUserScrolledAway) chatArea.scrollTop = chatArea.scrollHeight;
         }
 
-        const assistantMsg = { role: 'assistant', content: fullContent, reasoning: fullReasoning || null };
+        const assistantMsg = {
+            role: 'assistant',
+            content: fullContent,
+            reasoning: fullReasoning || null,
+            usage: streamUsage || null,
+            apiRequest: apiRequest || null
+        };
         chats[currentChat].push(assistantMsg);
-        const newBubble = createMessageBubble(fullContent, 'ai', [], fullReasoning, assistantMsg);
+        const newBubble = createMessageBubble(fullContent, 'ai', [], fullReasoning, assistantMsg, cotAnalysisHtml);
         bubble.replaceWith(newBubble);
         updateHistoryTitle();
         saveChatToBackend();
@@ -1657,11 +1914,174 @@ const chatFileBtn = $('chatFileBtn'),
             try { await processToolCalls(fullContent); } catch (e) { console.error('[工具调用错误]', e); }
         }
 
+        // 追加输出循环 — 在工具调用全部完成后执行
+        try {
+            let appendCount = 0;
+            let appendContent = fullContent;
+            while (appendOutputEnabled && appendCount < 3 && appendContent.includes('{Svotye_system}')) {
+            appendCount++;
+            const cleanContent = appendContent.replace(/\{Svotye_system\}/g, '').trim();
+            // 更新已保存的助手消息内容（移除标记）
+            const lastAssistant = [...chats[currentChat]].reverse().find(m => m.role === 'assistant');
+            if (lastAssistant) lastAssistant.content = cleanContent;
+            // 更新当前 bubble 显示
+            const bubbleMd = bubble.querySelector('.markdown-body');
+            if (bubbleMd) bubbleMd.innerHTML = renderMarkdown(stripToolLines(cleanContent) || '...');
+
+            // 追加输出的用户占位符
+            const appendUserMsg = { role: 'user', content: '{Svotye_system}', images: [] };
+            chats[currentChat].push(appendUserMsg);
+
+            // 构建追加 UI think-block
+            const appendBlock = document.createElement('div');
+            appendBlock.className = 'think-block';
+            appendBlock.style.marginLeft = '-12px';
+            appendBlock.innerHTML =
+                `<div class="think-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <div class="think-icon">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8.00192 6.64454C8.75026 6.64454 9.35732 7.25169 9.35739 8.00001C9.35739 8.74838 8.7503 9.35548 8.00192 9.35548C7.25367 9.35533 6.64743 8.74829 6.64743 8.00001C6.6475 7.25178 7.25371 6.64468 8.00192 6.64454Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M9.97165 1.29981C11.5853 0.718916 13.271 0.642197 14.3144 1.68555C15.3577 2.72902 15.2811 4.41466 14.7002 6.02833C14.4707 6.66561 14.1504 7.32937 13.75 8.00001C14.1504 8.67062 14.4707 9.33444 14.7002 9.97169C15.2811 11.5854 15.3578 13.271 14.3144 14.3145C13.271 15.3579 11.5854 15.2811 9.97165 14.7002C9.3344 14.4708 8.67059 14.1505 7.99997 13.75C7.32933 14.1505 6.66558 14.4708 6.02829 14.7002C4.41461 15.2811 2.72899 15.3578 1.68552 14.3145C0.642155 13.271 0.71887 11.5854 1.29977 9.97169C1.52915 9.33454 1.84865 8.67049 2.24899 8.00001C1.84866 7.32953 1.52915 6.66544 1.29977 6.02833C0.718852 4.41459 0.64207 2.729 1.68552 1.68555C2.72897 0.642112 4.41456 0.718887 6.02829 1.29981C6.66541 1.52918 7.32949 1.8487 7.99997 2.24903C8.67045 1.84869 9.33451 1.52919 9.97165 1.29981Z" fill="currentColor"/></svg>
+                    </div>
+                    <span>追加输出 (${appendCount}/3)</span>
+                    <div class="think-arrow">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z" fill="currentColor"/></svg>
+                    </div>
+                </div>
+                <div class="think-body-wrapper">
+                    <div class="think-line"></div>
+                    <div class="think-content">追加生成中...</div>
+                </div>`;
+            bubble.appendChild(appendBlock);
+            const appendContentDiv = appendBlock.querySelector('.think-content');
+            const appendReasoningDiv = document.createElement('div');
+
+            // 构建消息列表并调用 API
+            const appendMsgs = chats[currentChat]
+                .filter(m => m.role)
+                .map(m => ({ role: m.role, content: m.content, images: m.images || [] }));
+            const appendCallResult = await callAPI(reorderMessages(appendMsgs));
+            const appendStream = appendCallResult.body;
+            const appendApiRequest = appendCallResult.apiRequest;
+
+            const appendDecoder = new TextDecoder();
+            const appendReader = appendStream.getReader();
+            let appendBuffer = '';
+            let appendFullContent2 = '';
+            let appendFullReasoning = '';
+            let appendStreamUsage = null;
+
+            while (true) {
+                const { done, value } = await appendReader.read();
+                if (done) break;
+                appendBuffer += appendDecoder.decode(value, { stream: true });
+                const lines = appendBuffer.split('\n');
+                appendBuffer = lines.pop() || '';
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.substring(6);
+                        if (data === '[DONE]') continue;
+                        try {
+                            const json = JSON.parse(data);
+                            if (json.usage && !json.choices) { appendStreamUsage = json.usage; continue; }
+                            if (json.usage) appendStreamUsage = json.usage;
+                            const delta = json.choices?.[0]?.delta;
+                            if (delta) {
+                                if (delta.reasoning_content) {
+                                    appendFullReasoning += String(delta.reasoning_content);
+                                    appendReasoningDiv.innerHTML = createThinkBlock(appendFullReasoning);
+                                    if (!appendReasoningDiv.parentNode && appendContentDiv.parentNode) {
+                                        appendContentDiv.parentNode.insertBefore(appendReasoningDiv, appendContentDiv);
+                                    }
+                                }
+                                if (delta.content !== undefined && delta.content !== null) {
+                                    let contentPart = '';
+                                    const c = delta.content;
+                                    if (typeof c === 'string') contentPart = c;
+                                    else if (Array.isArray(c)) {
+                                        for (let i = 0; i < c.length; i++) {
+                                            const item = c[i];
+                                            if (typeof item === 'string') contentPart += item;
+                                            else if (item && typeof item === 'object') {
+                                                if (item.text) contentPart += item.text;
+                                                else if (item.value) contentPart += item.value;
+                                                else if (item.type === 'text' && item.text) contentPart += item.text;
+                                            }
+                                        }
+                                    }
+                                    appendFullContent2 += contentPart;
+                                    appendContentDiv.innerHTML = renderMarkdown(stripToolLines(appendFullContent2) || '...');
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+                if (!isUserScrolledAway) chatArea.scrollTop = chatArea.scrollHeight;
+            }
+
+            // 保存追加的助手消息
+            const appendAssistantMsg = {
+                role: 'assistant',
+                content: appendFullContent2,
+                reasoning: appendFullReasoning || null,
+                usage: appendStreamUsage || null,
+                apiRequest: appendApiRequest || null
+            };
+            chats[currentChat].push(appendAssistantMsg);
+
+            // 为追加内容添加 actions
+            const appendActionsDiv = document.createElement('div');
+            appendActionsDiv.className = 'message-actions';
+            appendActionsDiv.innerHTML =
+                `<button class="action-icon" data-action="copy" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 12-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                <button class="action-icon" data-action="regenerate" title="重新生成"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+                <button class="action-icon" data-action="delete" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 12 2v2"/></svg></button>
+                <button class="action-icon" data-action="tokens" title="Token消耗"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+                <button class="action-icon" data-action="apijson" title="API请求JSON"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>`;
+            appendContentDiv.parentNode.appendChild(appendActionsDiv);
+            appendActionsDiv.querySelector('[data-action="copy"]').onclick = () =>
+                navigator.clipboard.writeText(appendFullContent2).then(() => showToast('已复制'));
+            appendActionsDiv.querySelector('[data-action="delete"]').onclick = () => {
+                const idx = chats[currentChat].indexOf(appendAssistantMsg);
+                if (idx !== -1) chats[currentChat].splice(idx, 1);
+                appendBlock.remove();
+                saveChatToBackend();
+            };
+            appendActionsDiv.querySelector('[data-action="tokens"]').onclick = () => {
+                if (appendStreamUsage) {
+                    const usage = appendStreamUsage;
+                    const text = `Token 消耗:\n输入 tokens: ${usage.prompt_tokens ?? usage.input_tokens ?? 'N/A'}\n输出 tokens: ${usage.completion_tokens ?? usage.output_tokens ?? 'N/A'}\n总计 tokens: ${usage.total_tokens ?? 'N/A'}`;
+                    window.saveAndShowText('Token消耗', text);
+                } else { showToast('暂无 token 数据'); }
+            };
+            appendActionsDiv.querySelector('[data-action="apijson"]').onclick = () => {
+                if (appendApiRequest) {
+                    window.saveAndShowText('API请求JSON', JSON.stringify(appendApiRequest, null, 2));
+                } else { showToast('暂无请求数据'); }
+            };
+
+            // 工具调用处理
+            if (commandExecEnabled) {
+                try { await processToolCalls(appendFullContent2); } catch (e) { console.error('[追加工具调用错误]', e); }
+            }
+
+            // 准备下一轮检查
+            appendContent = appendFullContent2;
+            saveChatToBackend();
+        }
+        } catch (appendErr) {
+            console.error('[追加输出错误]', appendErr);
+        }
+
     } catch (e) {
         if (e && (e.name === 'AbortError' || e.code === 'ERR_CANCELED')) {
             const markdownDiv = bubble.querySelector('.markdown-body') || bubble;
             markdownDiv.innerHTML = renderMarkdown(fullContent);
-            const assistantMsg = { role: 'assistant', content: fullContent, reasoning: fullReasoning || null };
+            const assistantMsg = {
+                role: 'assistant',
+                content: fullContent,
+                reasoning: fullReasoning || null,
+                usage: streamUsage || null,
+                apiRequest: apiRequest || null
+            };
             chats[currentChat].push(assistantMsg);
             updateHistoryTitle();
             saveChatToBackend();
@@ -1956,6 +2376,7 @@ async function deleteStorageFile(filename) {
 // 渲染存储标签页
 async function renderStorageTab(files) {
     if (!filePanelBody) return;
+    if (filePanelTitle) filePanelTitle.textContent = '存储';
     
     if (!files || files.length === 0) {
         filePanelBody.innerHTML = '<div class="file-panel-empty">暂无存储文件</div>';
@@ -2087,19 +2508,132 @@ function showDeleteConfirm(filename) {
     cancelBtn.onclick = cleanup;
 }
 
-// 渲染插件标签页
-function renderPluginsTab() {
+// 已删除 - 插件移至深度思考弹窗
+/*
     if (!filePanelBody) return;
     if (filePanelTitle) filePanelTitle.textContent = '插件';
-    filePanelBody.innerHTML = `
-        <div class="file-panel-empty">
+
+    // 加载已保存的插件状态
+    let pluginStates = {};
+    try {
+        const saved = localStorage.getItem('fold_ai_plugin_states');
+        if (saved) pluginStates = JSON.parse(saved);
+    } catch (e) {}
+
+    // 获取 execute 命令
+    let executeCommands = [];
+    try {
+        const res = await fetch('/api/plugin/executes');
+        if (res.ok) {
+            const data = await res.json();
+            executeCommands = data.commands || [];
+        }
+    } catch (e) {}
+
+    let html = '';
+
+    // 显示常规插件
+    if (executeCommands.length > 0 || true) {
+        html += '<div class="settings-section-title" style="margin-bottom:10px;">函数工具</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">';
+
+        // execute 命令列表
+        for (const cmd of executeCommands) {
+            const isOn = pluginStates['exec:' + cmd.name] === true;
+            html += `
+                <div class="extra-prompt-item" style="flex-direction:row;align-items:center;justify-content:space-between;padding:12px 14px;">
+                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                        <div style="font-size:16px;flex-shrink:0;">⚡</div>
+                        <div style="min-width:0;">
+                            <div style="font-size:13px;font-weight:500;color:var(--text);">${escapeHtml(cmd.name)}</div>
+                            <div style="font-size:11px;color:#999;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(cmd.fileSpec)}</div>
+                        </div>
+                    </div>
+                    <div class="think-mode-selector" style="flex-shrink:0;" data-plugin="exec:${cmd.name}">
+                        <button class="think-mode-option ${!isOn ? 'active' : ''}" data-value="off">关闭</button>
+                        <button class="think-mode-option ${isOn ? 'active' : ''}" data-value="on">开启</button>
+                    </div>
+                </div>`;
+        }
+
+        if (executeCommands.length === 0) {
+            html += `<div style="text-align:center;padding:24px 0;color:#999;font-size:13px;">暂无函数工具，请在 execute.txt 中定义</div>`;
+        }
+
+        html += '</div>';
+    }
+
+    // 常规插件
+    try {
+        const res = await fetch('/api/plugins');
+        if (res.ok) {
+            const data = await res.json();
+            const plugins = data.plugins || [];
+
+            if (plugins.length > 0) {
+                html += '<div class="settings-section-title" style="margin-bottom:10px;">系统插件</div>';
+                html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+
+                for (const plugin of plugins) {
+                    const pluginKey = 'plugin:' + plugin.id;
+                    const saved = pluginStates[pluginKey];
+                    // 默认关闭
+                    const isOn = saved === true;
+                    const pluginIcon = plugin.icon || '🔌';
+
+                    html += `
+                        <div class="extra-prompt-item" style="flex-direction:row;align-items:center;justify-content:space-between;padding:12px 14px;">
+                            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                                <div style="font-size:20px;flex-shrink:0;">${pluginIcon}</div>
+                                <div style="min-width:0;">
+                                    <div style="font-size:13px;font-weight:500;color:var(--text);">${escapeHtml(plugin.name || plugin.id)}</div>
+                                    <div style="font-size:11px;color:#999;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(plugin.description || '')}</div>
+                                </div>
+                            </div>
+                            <div class="think-mode-selector" style="flex-shrink:0;" data-plugin="${pluginKey}">
+                                <button class="think-mode-option ${!isOn ? 'active' : ''}" data-value="off">关闭</button>
+                                <button class="think-mode-option ${isOn ? 'active' : ''}" data-value="on">开启</button>
+                            </div>
+                        </div>`;
+                }
+
+                html += '</div>';
+            }
+        }
+    } catch (e) {}
+
+    if (!html) {
+        html = `<div class="file-panel-empty">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.2;">
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
-            <div style="font-weight:500;color:#bbb;">插件功能即将推出</div>
-            <div style="font-size:11px;color:#ccc;">扩展 Fold.AI 的能力边界</div>
+            <div style="font-weight:500;color:#bbb;">暂无可用插件</div>
         </div>`;
+    }
+
+    filePanelBody.innerHTML = html;
+
+    // 绑定切换事件
+    filePanelBody.querySelectorAll('.think-mode-selector[data-plugin]').forEach(selector => {
+        const pluginKey = selector.dataset.plugin;
+        selector.querySelectorAll('.think-mode-option').forEach(btn => {
+            btn.addEventListener('click', function() {
+                selector.querySelectorAll('.think-mode-option').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const isOn = this.dataset.value === 'on';
+                let states = {};
+                try {
+                    const saved = localStorage.getItem('fold_ai_plugin_states');
+                    if (saved) states = JSON.parse(saved);
+                } catch (e) {}
+                states[pluginKey] = isOn;
+                localStorage.setItem('fold_ai_plugin_states', JSON.stringify(states));
+                showToast(isOn ? '已开启' : '已关闭');
+            });
+        });
+    });
 }
+*/
 // 渲染身份标签页
 async function renderIdentityTab() {
     if (!filePanelBody) return;
@@ -2139,9 +2673,6 @@ async function openFilePanel(tab = 'storage') {
         case 'storage':
             const files = await getStorageFiles();
             renderStorageTab(files);
-            break;
-        case 'plugins':
-            renderPluginsTab();
             break;
         case 'identity':
             await renderIdentityTab();
@@ -2244,6 +2775,30 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button class="tool-chain-option ${!commandExecEnabled ? 'active' : ''}" data-tool="command" data-value="off">禁用</button>
                     </div>
                 </div>
+                <div class="tool-chain-item">
+                    <div class="tool-chain-item-left">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.47V19a2 2 0 11-4 0v-.53c0-1.03-.47-1.99-1.274-2.618l-.548-.547z"/>
+                        </svg>
+                        <span>思维链</span>
+                    </div>
+                    <div class="tool-chain-toggle">
+                        <button class="tool-chain-option ${chainOfThoughtEnabled ? 'active' : ''}" data-tool="cot" data-value="on">允许</button>
+                        <button class="tool-chain-option ${!chainOfThoughtEnabled ? 'active' : ''}" data-tool="cot" data-value="off">禁用</button>
+                    </div>
+                </div>
+                <div class="tool-chain-item">
+                    <div class="tool-chain-item-left">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                        </svg>
+                        <span>追加输出</span>
+                    </div>
+                    <div class="tool-chain-toggle">
+                        <button class="tool-chain-option ${appendOutputEnabled ? 'active' : ''}" data-tool="append" data-value="on">允许</button>
+                        <button class="tool-chain-option ${!appendOutputEnabled ? 'active' : ''}" data-tool="append" data-value="off">禁用</button>
+                    </div>
+                </div>
             </div>
             <!-- 思考模式区域 -->
             <div class="think-section">
@@ -2307,10 +2862,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     popup.querySelectorAll('.tool-chain-option[data-tool="command"]').forEach(o => {
                         o.classList.toggle('active', o === option);
                     });
-                    // 同步到插件
                     if (window.CommandExecutionPlugin) {
                         window.CommandExecutionPlugin.setEnabled(commandExecEnabled);
                     }
+                    saveSettingsToLocal();
+                }
+                if (tool === 'cot') {
+                    chainOfThoughtEnabled = value === 'on';
+                    popup.querySelectorAll('.tool-chain-option[data-tool="cot"]').forEach(o => {
+                        o.classList.toggle('active', o === option);
+                    });
+                    if (window.ChainOfThoughtPlugin) {
+                        window.ChainOfThoughtPlugin.setEnabled(chainOfThoughtEnabled);
+                    }
+                    saveSettingsToLocal();
+                }
+                if (tool === 'append') {
+                    appendOutputEnabled = value === 'on';
+                    popup.querySelectorAll('.tool-chain-option[data-tool="append"]').forEach(o => {
+                        o.classList.toggle('active', o === option);
+                    });
                     saveSettingsToLocal();
                 }
             });
@@ -2429,6 +3000,9 @@ if (sidebarToggle) {
         window.CommandExecutionPlugin.setEnabled(commandExecEnabled);
         window.CommandExecutionPlugin.setConfirmBeforeExecution(commandConfirmEnabled);
     }
+    if (window.ChainOfThoughtPlugin) {
+        window.ChainOfThoughtPlugin.setEnabled(chainOfThoughtEnabled);
+    }
 
     (async () => {
         await loadProviders();
@@ -2441,4 +3015,6 @@ if (sidebarToggle) {
         if (currentProvider) { await loadModels(currentProvider); }
         console.log('✅ 初始化完成');
     })();
-})();
+
+    // 执行插件模式下的文件
+	})();

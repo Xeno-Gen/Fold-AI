@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { logger } from '../logger';
 
 const CONFIG_DIR = path.join(__dirname, '../../Config');
 
@@ -14,7 +15,7 @@ function readJsonFile(filename: string): any {
             return JSON.parse(content);
         }
     } catch (e) {
-        console.error(`[配置解析] 读取 ${filename} 失败:`, e);
+        logger.error(`config parse: failed to read ${filename}: ` + e);
     }
     return null;
 }

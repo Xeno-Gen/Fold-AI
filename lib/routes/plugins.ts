@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { getUserProviderKey, getUserProviderUrl } from './providers';
+import { logger } from '../logger';
 
 export const pluginsRouter = Router();
 
@@ -31,7 +32,7 @@ pluginsRouter.get('/plugins', (req: Request, res: Response) => {
                     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
                     plugins.push(manifest);
                 } catch (e) {
-                    console.warn(`[插件] 读取 ${folder}/plugin.json 失败`);
+                    logger.warn(`failed to read plugin manifest: ${folder}/plugin.json`);
                 }
             }
         }

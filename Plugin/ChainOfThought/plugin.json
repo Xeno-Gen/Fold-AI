@@ -1,0 +1,14 @@
+{
+  "id": "ChainOfThought",
+  "name": "思维链",
+  "version": "1.0.0",
+  "description": "三阶段思维链推理工具: 判断需求、处理需求、完成标记",
+  "author": "Fold.AI",
+  "official": true,
+  "type": "tool",
+  "entry": "index.js",
+  "permissions": [],
+  "settings": {
+    "enabled": false
+  }
+}

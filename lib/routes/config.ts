@@ -21,11 +21,12 @@ configRouter.get('/config', (req: Request, res: Response) => {
         customPort: userConfig.customPort,
         providerKeys: keysStatus,
         systemPrompt: userConfig.systemPrompt || '',
+        chatFormat: userConfig.chatFormat || '',
     });
 });
 
 configRouter.post('/config', (req: Request, res: Response) => {
-    const { defaultParams, currentProvider, currentModel, customPort, systemPrompt } = req.body;
+    const { defaultParams, currentProvider, currentModel, customPort, systemPrompt, chatFormat } = req.body;
     const userConfig = getUserConfig(req.userToken!);
     if (defaultParams) {
         userConfig.defaultParams = { ...userConfig.defaultParams, ...defaultParams };
@@ -34,6 +35,7 @@ configRouter.post('/config', (req: Request, res: Response) => {
     if (currentModel !== undefined) userConfig.currentModel = currentModel;
     if (customPort !== undefined) userConfig.customPort = customPort;
     if (systemPrompt !== undefined) userConfig.systemPrompt = systemPrompt;
+    if (chatFormat !== undefined) userConfig.chatFormat = chatFormat;
     saveUserConfig(req.userToken!, userConfig);
     res.json({ success: true });
 });
