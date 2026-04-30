@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-orange)](#license)
 
 > 本项目完全由 **DeepSeek-v4-pro** 在 **20 分钟** 内自动生成，源码压缩后仅 **44KB**，运行时内存占用仅 **20MB** —— 一款真正“即开即用”的轻量级 AI 助手。
-> GitHub上资源占用最小的TypeScript程序
+> GitHub上资源占用最小的AI客户端。
 
 <details open>
 <summary>📸 界面预览（手机端友好）</summary>
