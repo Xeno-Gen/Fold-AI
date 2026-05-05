@@ -5,7 +5,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-v20--v25.9.0-brightgreen?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
-[![Size](https://img.shields.io/badge/压缩后-44KB-success)](#)
+[![Size](https://img.shields.io/badge/压缩后-90KB-success)](#)
 [![Memory](https://img.shields.io/badge/内存-~20MB-9cf)](#)
 [![License](https://img.shields.io/badge/license-MIT-orange)](#license)
 
@@ -18,7 +18,7 @@
 ## ✨ 为什么选择 Fold.AI？
 
 * ⚡ **20 分钟诞生**：整个项目由 DeepSeek-v4-pro 在 20 分钟内写完，展现 AI 编码的惊人效率。
-* 📦 **极致轻量**：源码压缩后仅 **44KB**，原生 JavaScript 运行，无需庞大依赖。
+* 📦 **极致轻量**：源码压缩后仅 **90KB**，原生 JavaScript 运行，无需庞大依赖。
 * 🧠 **内存友好**：Node.js 进程内存占用低至 **20MB**，老旧设备也能流畅运行。
 * 🌍 **全平台支持**：只要有 Node.js (v20 – v25.9.0)，Windows / macOS / Linux 均可使用。
 * 🔌 **13 大模型提供商**：国产模型 + 海外主流，一站式接入。
