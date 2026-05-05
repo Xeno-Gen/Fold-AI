@@ -2,11 +2,13 @@
 
 **极速 · 便携 · 全平台 AI 对话客户端（Web GUI）**
 
+
 [!\[Node.js](https://img.shields.io/badge/Node.js-v20--v25.9.0-brightgreen?logo=node.js)](https://nodejs.org/)
 [!\[TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [!\[Size](https://img.shields.io/badge/压缩后-44KB-success)](#)
 [!\[Memory](https://img.shields.io/badge/内存-\~20MB-9cf)](#)
 [!\[License](https://img.shields.io/badge/license-MIT-orange)](#license)
+
 
 > 本项目完全由 \*\*DeepSeek-v4-pro\*\* 在 \*\*20 分钟\*\* 内自动生成，源码压缩后仅 \*\*44KB\*\*，运行时内存占用仅 \*\*20MB\*\* —— 一款真正"即开即用"的轻量级 AI 助手。
 > GitHub 上资源占用最小的 AI 客户端。
