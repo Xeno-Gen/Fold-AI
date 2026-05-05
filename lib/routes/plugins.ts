@@ -8,7 +8,7 @@ import { logger } from '../logger';
 export const pluginsRouter = Router();
 
 const PLUGIN_DIR = path.join(__dirname, '../../Plugin');
-const CONFIG_DIR = path.join(__dirname, '../../Config');
+const CONFIG_DIR = path.join(__dirname, '../../config');
 
 /**
  * 获取插件列表
@@ -126,10 +126,10 @@ pluginsRouter.post('/plugin/detect', async (req: Request, res: Response) => {
         }
 
         const detectSystemPrompt = `判断用户是否需要调用插件，只需回答是或否。
-可用插件: CommandExecution(命令执行)
-如果需要则输出: tool_call:CommandExecution
+可用插件: CommandExecution(命令执行), Memory(记忆)
+如果需要则输出: tool:CommandExecution 或 tool:Memory
 如果不需要则输出: 无
-多个插件用逗号分隔: tool_call:插件1,插件2`;
+多个插件用换行分隔: tool:插件1\\ntool:插件2`;
 
         const detectMessages = [
             { role: "system", content: detectSystemPrompt },
@@ -159,10 +159,10 @@ pluginsRouter.post('/plugin/detect', async (req: Request, res: Response) => {
         const data: any = await response.json();
         const content = data.choices?.[0]?.message?.content || '';
         const lines = content.split('\n').map((l: string) => l.trim());
-        const toolCallLine = lines.find((l: string) => l.startsWith('tool_call:'));
+        const toolLines = lines.filter((l: string) => l.startsWith('tool:'));
 
-        if (toolCallLine) {
-            const pluginNames = toolCallLine.split(':')[1].split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (toolLines.length > 0) {
+            const pluginNames = toolLines.map((l: string) => l.split(':')[1].trim()).filter(Boolean);
             return res.json({ tool_calls: pluginNames });
         }
 
@@ -192,7 +192,7 @@ pluginsRouter.post('/plugin/command/generate', async (req: Request, res: Respons
 
         const cmdPrompt = `用户需要执行系统命令。请根据对话内容，输出具体的命令。
 输出格式:
-tool_call:CommandExecution
+tool:CommandExecution
 shell:powershell
 command:要执行的命令
 
@@ -226,7 +226,7 @@ command:要执行的命令
         const data: any = await response.json();
         const content = data.choices?.[0]?.message?.content || '';
         const lines = content.split('\n').map((l: string) => l.trim());
-        const toolCallLine = lines.find((l: string) => l.startsWith('tool_call:'));
+        const toolLine = lines.find((l: string) => l.startsWith('tool:'));
         const shellLine = lines.find((l: string) => l.startsWith('shell:'));
         const commandLine = lines.find((l: string) => l.startsWith('command:'));
 

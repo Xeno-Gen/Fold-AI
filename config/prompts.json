@@ -1,0 +1,20 @@
+{
+  "think_modes": {
+    "deep": {
+      "label": "深度思考",
+      "steps": []
+    },
+    "direct": {
+      "label": "直接模式",
+      "steps": []
+    },
+    "reason": {
+      "label": "推理模式",
+      "steps": []
+    },
+    "creative": {
+      "label": "创意模式",
+      "steps": []
+    }
+  }
+}

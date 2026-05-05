@@ -65,6 +65,7 @@ app.use(initUserMiddleware);
 
 app.use(express.static(path.join(__dirname, '../static')));
 app.use('/plugins', express.static(path.join(__dirname, '../Plugin')));
+app.use('/com', express.static(path.join(__dirname, '../com')));
 
 app.use('/api', chatRouter);
 app.use('/api', configRouter);
@@ -74,6 +75,27 @@ app.use('/api', uploadRouter);
 app.use('/api', downloadRouter);
 app.use('/api', storageRouter);
 app.use('/api', pluginsRouter);
+
+app.get('/chat/:token', (req, res) => {
+    const htmlPath = path.join(__dirname, '../static/intro.html');
+    let html = fs.readFileSync(htmlPath, 'utf-8');
+    // 尝试从用户数据中查找该 token 对应的对话
+    try {
+        const dataDir = path.join(__dirname, '../data/users', req.userToken!, 'chats.json');
+        if (fs.existsSync(dataDir)) {
+            const chats = JSON.parse(fs.readFileSync(dataDir, 'utf-8'));
+            const chat = chats.find((c: any) => c.token === req.params.token);
+            if (chat) {
+                const chatJson = JSON.stringify(chat).replace(/</g, '\\u003c');
+                html = html.replace('<script src="/intro.js"></script>', '<script>window.__CHAT_DATA__=' + chatJson + ';window.__CHAT_TOKEN__="' + req.params.token + '";</script><script src="/intro.js"></script>');
+                return res.send(html);
+            }
+        }
+    } catch (e) {}
+    // 未找到对话，也标记 token 供前端读取
+    html = html.replace('<script src="/intro.js"></script>', '<script>window.__CHAT_DATA__=null;window.__CHAT_TOKEN__="' + req.params.token + '";</script><script src="/intro.js"></script>');
+    res.send(html);
+});
 
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../static/intro.html'));

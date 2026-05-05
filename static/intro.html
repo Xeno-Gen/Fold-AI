@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fold.AI</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/intro.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/intro.css">
     <style>
         :root {
             --bg: #ffffff;
@@ -47,37 +47,68 @@
         }
         .app-container{display:flex;height:100vh;width:100%;position:relative;}
         .sidebar-left{
-            width:0;min-width:0;height:100vh;background:#fafafa;border-right:1px solid var(--border);
-            display:flex;flex-direction:column;align-items:center;padding:0;z-index:100;
-            transition:width var(--transition),min-width var(--transition),padding var(--transition);
-            overflow:hidden;flex-shrink:0;gap:0;
+            position:fixed;left:-280px;top:0;width:280px;min-width:280px;height:100vh;
+            background:#fafafa;border-right:0.5px solid var(--border);
+            display:flex;flex-direction:column;align-items:flex-start;padding:16px 12px;gap:6px;
+            z-index:100;transition:left var(--transition),box-shadow 0.3s ease;overflow-y:auto;
+            box-shadow:4px 0 20px rgba(0,0,0,0);
         }
-        .sidebar-left.visible{width:56px;min-width:56px;padding:14px 8px;gap:12px;}
-        .sidebar-left.expanded{width:280px;min-width:280px;align-items:flex-start;padding:16px 12px;}
+        .sidebar-left.visible{left:0;box-shadow:4px 0 20px rgba(0,0,0,0.06);}
+        .sidebar-left.expanded{left:0;}
         .sidebar-toggle{
-            width:38px;height:38px;border-radius:10px;border:none;background:transparent;
-            cursor:pointer;display:flex;align-items:center;justify-content:center;color:#777;
-            transition:var(--transition);flex-shrink:0;
+            position:fixed;top:8px;left:8px;width:38px;height:38px;
+            border-radius:6px;border:none;background:#fff;display:flex;
+            align-items:center;justify-content:center;cursor:pointer;z-index:101;
+            color:#555;box-shadow:0 1px 4px rgba(0,0,0,0.06);
+            transition:left 0.3s cubic-bezier(0.4,0,0.2,1),background 0.2s,box-shadow 0.2s;
         }
-        .sidebar-toggle:hover{background:#f0f0f0;color:#1a1a1a;}
+        .sidebar-toggle:hover{background:#f0f0f0;box-shadow:0 1px 6px rgba(0,0,0,0.1);}
+        .sidebar-left.visible .sidebar-toggle{left:calc(280px - 38px - 8px);background:transparent;box-shadow:none;}
+        .sidebar-left.visible .sidebar-toggle:hover{background:rgba(0,0,0,0.04);}
+        .sidebar-newchat-fab{
+            position:fixed;top:52px;left:8px;width:38px;height:38px;
+            border-radius:10px;border:none;background:#fff;display:flex;
+            align-items:center;justify-content:center;cursor:pointer;z-index:101;
+            color:#555;box-shadow:0 1px 4px rgba(0,0,0,0.06);
+            transition:opacity 0.3s ease,background 0.2s;
+        }
+        .sidebar-newchat-fab:hover{background:#f0f0f0;color:#1a1a1a;}
+        .sidebar-left.visible .sidebar-newchat-fab{opacity:0;pointer-events:none;}
+        .sidebar-settings-fab{
+            position:fixed;bottom:12px;left:8px;width:38px;height:38px;
+            border-radius:10px;border:none;background:#fff;display:flex;
+            align-items:center;justify-content:center;cursor:pointer;z-index:101;
+            color:#555;box-shadow:0 1px 4px rgba(0,0,0,0.06);
+            transition:opacity 0.3s ease,background 0.2s;
+        }
+        .sidebar-settings-fab:hover{background:#f0f0f0;color:#1a1a1a;}
+        .sidebar-left.visible .sidebar-settings-fab{opacity:0;pointer-events:none;}
+        @media(max-width:768px){.sidebar-newchat-fab{top:52px;}.sidebar-settings-fab{top:auto;bottom:12px;}}
+        /* 桌面端：侧边栏展开时右边内容右移 */
+        @media(min-width:769px){
+            .sidebar-left{position:fixed;left:-280px;}
+            .sidebar-left.visible{left:0;}
+            .sidebar-left.visible ~ .main-content{margin-left:280px;}
+            .main-content{transition:margin-left var(--transition);}
+        }
         .sidebar-content{display:none;flex-direction:column;gap:6px;width:100%;overflow-y:auto;flex:1;}
-        .sidebar-left.expanded .sidebar-content{display:flex;}
+        .sidebar-left.visible .sidebar-content{display:flex;}
         .sidebar-logo{
             font-size:20px;letter-spacing:-0.5px;color:#1a1a1a;margin-bottom:16px;cursor:pointer;
             user-select:none;display:none;white-space:nowrap;
         }
-        .sidebar-left.expanded .sidebar-logo{display:block;}
+        .sidebar-left.visible .sidebar-logo{display:block;}
         .sidebar-logo .bold{font-weight:700;}.sidebar-logo .light{font-weight:300;}
         .new-chat-btn{
-            display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;
-            border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px;font-weight:500;
+            display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:6px;
+            border:0.5px solid var(--border);background:#fff;cursor:pointer;font-size:13px;font-weight:500;
             color:#1a1a1a;transition:var(--transition);white-space:nowrap;width:100%;
         }
         .new-chat-btn:hover{background:#f9f9f9;border-color:#d5d5d5;}
         .chat-history-list{list-style:none;display:flex;flex-direction:column;gap:2px;flex:1;width:100%;}
         .chat-history-item{
             display:flex;align-items:center;justify-content:space-between;
-            padding:10px 14px;border-radius:10px;cursor:pointer;font-size:13px;color:#555;
+            padding:10px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:#555;
             transition:var(--transition);white-space:nowrap;overflow:hidden;
         }
         .chat-history-item:hover{background:#eaeaea;color:#1a1a1a;}
@@ -90,15 +121,15 @@
             font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#999;
             padding:6px 4px;margin-top:4px;display:none;
         }
-        .sidebar-left.expanded .sidebar-section-title{display:block;}
-        .sidebar-collapsed-icons{display:none;flex-direction:column;align-items:center;gap:14px;width:100%;}
-        .sidebar-left.visible:not(.expanded) .sidebar-collapsed-icons{display:flex;}
-        .icon-circle{
-            width:38px;height:38px;border-radius:10px;border:none;background:transparent;
-            display:flex;align-items:center;justify-content:center;cursor:pointer;color:#777;
-            transition:var(--transition);
+        .sidebar-left.visible .sidebar-section-title{display:block;}
+        .sidebar-settings-btn{
+            display:none;width:100%;align-items:center;gap:8px;padding:10px 14px;
+            border-radius:6px;border:0.5px solid var(--border);background:#fff;
+            cursor:pointer;font-size:13px;font-weight:500;color:#1a1a1a;
+            transition:var(--transition);white-space:nowrap;margin-top:auto;flex-shrink:0;
         }
-        .icon-circle:hover{background:#f0f0f0;color:#1a1a1a;}
+        .sidebar-settings-btn:hover{background:#f9f9f9;border-color:#d5d5d5;}
+        .sidebar-left.visible .sidebar-settings-btn{display:flex;}
         .main-content{
             flex:1;display:flex;flex-direction:column;height:100vh;position:relative;min-width:0;
             align-items:center;overflow:hidden;background:#fff;
@@ -112,7 +143,7 @@
         }
         body.chat-active .chat-header{opacity:1;height:auto;}
         .chat-header span{display:inline;}
-        .chat-header input{display:none;border:1px solid #ddd;border-radius:8px;padding:2px 8px;font-size:14px;width:200px;text-align:center;}
+        .chat-header input{display:none;border:1px solid #ddd;border-radius:4px;padding:2px 8px;font-size:14px;width:200px;text-align:center;}
         .center-initial{
             position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;
             flex-direction:column;align-items:center;gap:28px;width:var(--input-width);
@@ -121,6 +152,7 @@
         body.chat-active .center-initial{display:none;}
         .title-container{position:relative;display:inline-block;overflow:hidden;}
         .title-text{font-size:50px;letter-spacing:-1.5px;color:#1a1a1a;z-index:1;}
+        .title-subtitle{font-size:15px;color:#999;text-align:center;margin-top:2px;font-weight:400;z-index:1;position:relative;user-select:none;}
         .title-beam {
     position: absolute;
     top: 0;
@@ -170,61 +202,54 @@
             display:flex;align-items:center;justify-content:space-between;padding:4px 14px 10px;
             gap:6px;border-top:1px solid transparent;
         }
-        .input-wrapper-outer:focus-within .input-toolbar{border-top-color:#f0f0f0;}
+        .input-wrapper-outer:focus-within .input-toolbar{border-top-color:transparent;}
         .toolbar-left{display:flex;align-items:center;gap:4px;flex:1;}
         .toolbar-right{display:flex;align-items:center;gap:6px;}
         .tool-btn{
-            width:34px;height:34px;border-radius:10px;border:none;background:transparent;
+            width:34px;height:34px;border-radius:6px;border:none;background:transparent;
             cursor:pointer;color:#888;display:flex;align-items:center;justify-content:center;
         }
         .tool-btn:hover{background:#f4f4f4;color:#333;}
-        .send-btn{background:#1a1a1a;color:#fff;border-radius:10px;width:36px;height:36px;}
+        .send-btn{background:#1a1a1a;color:#fff;border-radius:6px;width:36px;height:36px;}
         .send-btn:hover{background:#333;}
         .send-btn:disabled{background:#ccc;color:#999;cursor:not-allowed;}
         .stop-btn{background:#1a1a1a;color:#fff;}
 
         .model-select-wrapper{position:relative;display:inline-block;}
         .model-select-btn{
-            background:#f7f7f7;border:1px solid #e0e0e0;border-radius:20px;padding:5px 12px;
-            font-size:12px;font-weight:500;color:#444;cursor:pointer;display:flex;align-items:center;
-            gap:6px;white-space:nowrap;transition:var(--transition);max-width:160px;font-family:inherit;
+            background:transparent;border:none;border-radius:6px;padding:0 10px;
+            height:32px;font-size:12px;font-weight:500;color:#555;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+            gap:4px;white-space:nowrap;transition:var(--transition);font-family:inherit;
         }
-        .model-select-btn:hover{background:#efefef;border-color:#ccc;}
-        .model-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0;}
+        .model-select-btn:hover{background:#f2f2f2;}
 
         .model-picker-dropdown{
             position:fixed;z-index:999;display:none;flex-direction:column;
-            width:360px;max-height:400px;background:#fff;border-radius:20px;
-            box-shadow:0 20px 50px rgba(0,0,0,0.18);border:1px solid #e8e8e8;
-            overflow:hidden;
+            width:260px;max-height:360px;background:#fff;border-radius:6px;
+            box-shadow:0 20px 50px rgba(0,0,0,0.18);border:0.5px solid #e0e0e0;
+            overflow:hidden;transform-origin:bottom center;
         }
+        .model-picker-dropdown.show{display:flex;animation:dropExpand 0.15s cubic-bezier(0.165,0.85,0.45,1) forwards;}
+        @keyframes dropExpand{0%{opacity:0;transform:scaleY(0.85) translateY(6px);}100%{opacity:1;transform:scaleY(1) translateY(0);}}
         .model-picker-dropdown .model-search{padding:12px;border-bottom:1px solid #f0f0f0;}
         .model-picker-dropdown .model-search input{
-            width:100%;padding:10px 14px;border:1px solid #e8e8e8;border-radius:12px;
+            width:100%;padding:10px 14px;border:1px solid #e8e8e8;border-radius:6px;
             font-size:13px;outline:none;background:#fafafa;
         }
         .model-picker-dropdown .model-list{flex:1;overflow-y:auto;padding:8px;}
         .model-picker-item{
-            display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;
-            cursor:pointer;transition:var(--transition);margin-bottom:4px;
+            display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:6px;
+            cursor:pointer;transition:var(--transition);margin-bottom:2px;
         }
-        .model-picker-item:hover{background:#f6f6f6;}
-        .model-picker-item.active{background:#f0f0f0;font-weight:500;}
-        .model-picker-item .model-icon{
-            width:36px;height:36px;border-radius:10px;background:#f5f5f5;display:flex;
-            align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;
-        }
-        .model-picker-item .model-icon img{width:100%;height:100%;object-fit:contain;}
-        .model-picker-item .model-info{flex:1;min-width:0;}
-        .model-picker-item .model-name{font-size:14px;color:#1a1a1a;font-weight:500;}
-        .model-picker-item .model-desc{font-size:11px;color:#999;margin-top:2px;}
-        .model-picker-item .model-check{color:#1a1a1a;font-size:16px;opacity:0;}
-        .model-picker-item.active .model-check{opacity:1;}
+        .model-picker-item:hover{background:#f3f3f3;}
+        .model-picker-item.active{background:#e8e8e8;font-weight:600;color:#000;}
+        .model-picker-item .model-name{font-size:13px;color:#1a1a1a;font-weight:500;flex:1;}
+        .model-picker-item.active .model-name{color:#000;}
 
         .char-count{font-size:10px;color:#aaa;user-select:none;margin-right:4px;white-space:nowrap;}
         .image-preview-area{display:flex;gap:8px;padding:2px 14px 6px;flex-wrap:wrap;max-height:76px;overflow-y:auto;}
         .image-preview-item{
-            width:44px;height:44px;border-radius:10px;background-size:cover;background-position:center;
+            width:44px;height:44px;border-radius:6px;background-size:cover;background-position:center;
             border:1px solid #e6e6e6;position:relative;
         }
         .remove-preview{
@@ -249,10 +274,10 @@
             max-width:78%;padding:10px 16px;font-size:15px;line-height:1.6;word-wrap:break-word;
             position:relative;margin-bottom:40px;
         }
-        .message-user{align-self:flex-end;background:var(--bubble-user);color:var(--bubble-user-text);border-radius:18px 18px 6px 18px;}
+        .message-user{align-self:flex-end;background:var(--bubble-user);color:var(--bubble-user-text);border-radius:4px 18px 6px 18px;}
         .message-ai{align-self:flex-start;background:transparent;color:#1a1a1a;max-width:100%;}
         .message-ai .markdown-body{font-size:15px;line-height:1.6;}
-        .message-system{align-self:stretch;background:#f5f5f5;color:#555;font-size:13px;line-height:1.5;border-radius:8px;padding:8px 14px;margin:4px 0;max-width:100%;}
+        .message-system{align-self:stretch;background:#f5f5f5;color:#555;font-size:13px;line-height:1.5;border-radius:4px;padding:8px 14px;margin:4px 0;max-width:100%;}
         .message-system .markdown-body{font-size:13px;line-height:1.5;}
         [data-theme="dark"] .message-system{background:#1a1a1a;color:#999;}
 
@@ -379,30 +404,31 @@
             position:fixed;top:0;right:0;width:520px;max-width:100%;height:100%;background:#fff;
             box-shadow:-8px 0 30px rgba(0,0,0,0.08);z-index:51;transform:translateX(100%);
             transition:transform 0.3s ease;display:flex;flex-direction:column;
+            border-left:0.5px solid #e0e0e0;
         }
         .drawer-overlay.active .drawer{transform:translateX(0);}
         .drawer-header{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid #eee;}
         .drawer-header h2{font-size:18px;font-weight:600;}
-        .drawer-close{width:32px;height:32px;border-radius:8px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#777;}
+        .drawer-close{width:32px;height:32px;border-radius:4px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#777;}
         .drawer-close:hover{background:#f0f0f0;}
         .drawer-body{flex:1;overflow-y:auto;padding:20px;}
         .section-title{font-size:12px;font-weight:600;color:#999;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;}
         .provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-bottom:24px;}
         .provider-card{
-            border:1px solid #e0e0e0;border-radius:14px;padding:14px 8px;text-align:center;
+            border:0.5px solid #ddd;border-radius:6px;padding:14px 8px;text-align:center;
             cursor:pointer;transition:var(--transition);background:#fff;
         }
         .provider-card:hover{border-color:#aaa;box-shadow:0 2px 12px rgba(0,0,0,0.04);}
         .provider-card.active{border-color:#1a1a1a;background:#fafafa;box-shadow:0 2px 12px rgba(0,0,0,0.06);}
-        .provider-card .prov-icon{width:36px;height:36px;border-radius:10px;background:#f5f5f5;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;}
+        .provider-card .prov-icon{width:36px;height:36px;border-radius:6px;background:#f5f5f5;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;}
         .provider-card .prov-icon img{width:100%;height:100%;object-fit:contain;}
         .provider-name{font-size:11px;color:#555;font-weight:500;}
 
         .key-input-row{display:flex;gap:8px;align-items:center;margin-bottom:12px;}
-        .key-input-row input{flex:1;padding:10px 14px;border:1px solid #e0e0e0;border-radius:12px;font-size:13px;outline:none;background:#fafafa;}
-        .key-input-row button{padding:10px 16px;background:#1a1a1a;color:#fff;border:none;border-radius:12px;font-size:13px;cursor:pointer;white-space:nowrap;}
+        .key-input-row input{flex:1;padding:10px 14px;border:1px solid #e0e0e0;border-radius:6px;font-size:13px;outline:none;background:#fafafa;}
+        .key-input-row button{padding:10px 16px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap;}
         .key-list{display:flex;flex-direction:column;gap:8px;margin:16px 0;}
-        .key-row{display:flex;align-items:center;padding:8px 12px;background:#fafafa;border-radius:10px;border:1px solid #eee;}
+        .key-row{display:flex;align-items:center;padding:8px 12px;background:#fafafa;border-radius:6px;border:1px solid #eee;}
         .key-row .key-mask{flex:1;font-size:13px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
         .key-row .key-edit-input{flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;display:none;}
         .key-row.edit .key-mask{display:none;}
@@ -419,7 +445,7 @@
             width:140px;
             padding:6px 10px;
             border:1px solid #ddd;
-            border-radius:8px;
+            border-radius:4px;
             font-size:13px;
             outline:none;
             background:#fafafa;
@@ -439,7 +465,7 @@
             height:80px;
             padding:10px 14px;
             border:1px solid #e0e0e0;
-            border-radius:12px;
+            border-radius:6px;
             font-size:13px;
             font-family:inherit;
             outline:none;
@@ -451,16 +477,18 @@
             background:#fff;
         }
 
-        .toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:10px 24px;border-radius:20px;font-size:14px;z-index:999999;transition:opacity 0.3s;}
+        .toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:10px 24px;border-radius:4px;font-size:14px;z-index:999999;transition:opacity 0.3s;}
         .empty-state-hint{text-align:center;color:#bbb;font-size:13px;margin-top:32px;user-select:none;}
         body.chat-active .empty-state-hint{display:none;}
 
         .direct-chat-container{text-align:center;margin-top:4px;}
+        .center-initial.slide-down{animation:slideDown 0.4s cubic-bezier(0.4,0,0.2,1) forwards;}
+        @keyframes slideDown{0%{transform:translate(-50%,-50%);opacity:1;}100%{transform:translate(-50%,30vh);opacity:0;}}
 
         @media(max-width:768px){
             :root{--input-width:100%;--input-min-width:unset;}
             .drawer{width:100%;}
-            .model-picker-dropdown{width:90vw;left:5vw!important;}
+            .model-picker-dropdown{width:90vw;left:5vw!important;transform-origin:bottom center!important;}
             .center-initial { top: 45%; }
             .bottom-input-container { padding: 8px 10px 24px; }
             .message-user .message-actions { right: 4px; bottom: -32px; left: auto; }
@@ -473,28 +501,30 @@
 <div class="app-container">
     <aside class="sidebar-left" id="sidebarLeft">
         <button class="sidebar-toggle" id="sidebarToggle">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
-        <div class="sidebar-collapsed-icons">
-            <button class="icon-circle" id="newChatIcon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-            <button class="icon-circle" id="historyIcon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
-        </div>
+        <button class="sidebar-newchat-fab" id="sidebarNewChatFab" title="新对话">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="sidebar-settings-fab" id="sidebarSettingsFab" title="设置">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+        </button>
         <div class="sidebar-content">
             <div class="sidebar-logo" id="sidebarLogo"><span class="bold">Fold</span><span class="light">.AI</span></div>
             <button class="new-chat-btn" id="newChatSidebarBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新对话</button>
             <div class="sidebar-section-title">对话历史</div>
             <ul class="chat-history-list" id="chatHistoryList"></ul>
         </div>
-        <!-- 侧边栏底部设置按钮 -->
-        <div class="sidebar-bottom">
-            <button class="icon-circle sidebar-settings-btn" id="sidebarSettingsBtn" title="设置">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-                <span class="sidebar-settings-label">设置</span>
-            </button>
-        </div>
+        <button class="sidebar-settings-btn" id="sidebarSettingsBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>设置</span>
+        </button>
     </aside>
 
     <main class="main-content" id="mainContent">
@@ -506,6 +536,7 @@
             <div class="title-container">
                 <div class="title-glow"></div>
                 <div class="title-text"><span class="bold">Fold</span><span class="light">.AI</span></div>
+                <div class="title-subtitle">今天能帮到你什么？</div>
                 <div class="title-beam"></div>
             </div>
             <div class="input-wrapper-outer">
@@ -524,7 +555,7 @@
                                              </div>
                     <div class="toolbar-right">
                         <div class="model-select-wrapper" id="initialModelWrapper">
-                            <button class="model-select-btn" id="initialModelBtn"><span class="model-dot"></span><span id="initialModelLabel">deepseek-v4-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                            <button class="model-select-btn" id="initialModelBtn"><span id="initialModelLabel">deepseek-v4-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
                         </div>
                         <button class="tool-btn send-btn" id="initialSendBtn" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
                     </div>
@@ -555,7 +586,7 @@
                                                </div>
                     <div class="toolbar-right">
                         <div class="model-select-wrapper" id="chatModelWrapper">
-                            <button class="model-select-btn" id="chatModelBtn"><span class="model-dot"></span><span id="chatModelLabel">deepseek-v4-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                            <button class="model-select-btn" id="chatModelBtn"><span id="chatModelLabel">deepseek-v4-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
                         </div>
 
                         <button class="tool-btn send-btn" id="chatSendBtn" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
@@ -564,6 +595,22 @@
             </div>
         </div>
         <div class="bottom-spacer"></div>
+
+        <!-- 设置面板（双栏布局替换右侧内容） -->
+        <div class="settings-panel" id="settingsPanel">
+            <div class="settings-panel-header">
+                <h2>设置</h2>
+                <button class="settings-panel-close" id="settingsPanelClose">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="settings-panel-layout">
+                <nav class="settings-panel-nav" id="settingsPanelNav"></nav>
+                <div class="settings-panel-content" id="settingsPanelContent"></div>
+            </div>
+        </div>
     </main>
 
     <div class="drawer-overlay" id="drawerOverlay">
@@ -643,19 +690,13 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
                         </svg>
-                        <span>版本 Beta-Advanced 0.1.2 · Fold.AI</span>
+                        <span id="versionDisplay">版本加载中...</span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
-<!-- 移动端侧边栏按钮 -->
-<button class="mobile-sidebar-btn" id="mobileSidebarBtn">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-</button>
 
 <!-- 文件管理面板 -->
 <div class="file-panel-overlay" id="filePanelOverlay">
@@ -670,18 +711,18 @@
             </button>
         </div>
         <div class="file-panel-tabs" id="filePanelTabs">
-            <button class="file-panel-tab active" data-tab="storage">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                </svg>
-                <span>存储</span>
-            </button>
-<button class="file-panel-tab" data-tab="identity">
+<button class="file-panel-tab active" data-tab="identity">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="8" r="4"/>
                     <path d="M4 20c0-4 4-7 8-7s8 3 8 7"/>
                 </svg>
                 <span>身份</span>
+            </button>
+<button class="file-panel-tab" data-tab="prompt">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                <span>提示词</span>
             </button>
         </div>
         <div class="file-panel-body" id="filePanelBody"></div>
@@ -704,7 +745,6 @@
 </div>
 
 <script src="/plugins/CommandExecution/index.js"></script>
-<script src="/plugins/ChainOfThought/index.js"></script>
-<script src="intro.js"></script>
+<script src="/intro.js"></script>
 </body>
 </html>
