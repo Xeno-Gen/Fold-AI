@@ -12,7 +12,7 @@
 ---
 
 ## 不同语言的Md
-[English README](https://github.com/Xeno-Gen/Fold.AI/edit/main/README-En.md)
+[English README](https://github.com/Xeno-Gen/Fold.AI/edit/main/README-en.md)
 [简体中文 README](https://github.com/Xeno-Gen/Fold.AI)
 
 ## 安装
