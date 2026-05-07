@@ -11,10 +11,14 @@
 
 ---
 
+## 不同语言的Md
+[English README](https://github.com/Xeno-Gen/Fold.AI/edit/main/README-Eh.md)
+[简体中文 README](https://github.com/Xeno-Gen/Fold.AI)
+
 ## 安装
 目前`Fold.ai`未上线任何包管理器平台，发行版本已被构建为原生JavaScript，可以使用Node.js直接运行
 ```
-#1.手动构建项目
+#1.手动构建项目依赖
 cd fold
 npm install
 Node bin/server.js
