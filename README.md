@@ -8,6 +8,9 @@
 
 > 一个轻量级、便携、跨平台的 AI Web GUI客户端
 
+**<img width="1582" height="813" alt="image" src="https://github.com/user-attachments/assets/c025cffe-e908-483c-b0f7-b1f2554e6000" />
+**
+
 ---
 
 ## 安装
