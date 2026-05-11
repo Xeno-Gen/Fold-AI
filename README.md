@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](#license)
 
-# 一个轻量级、便携、跨平台的 AI Web GUI客户端
+**轻量级、便携、跨平台的 AI Web GUI客户端**
 ## 兼顾了扮演、记忆、独立编码，无提示词污染
 ### 提供最纯净、原生的模型性能
 
