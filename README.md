@@ -26,17 +26,20 @@
 更精细的文件操作。
 
 ## 安装
-目前`Fold.ai`未上线任何包管理器平台，发行版本已被构建为原生JavaScript，可以使用Node.js直接运行
+目前`Fold.AI`未上线任何包管理器平台，发行版本已被构建为原生JavaScript，可以使用Node.js直接运行
 ```
-#1.手动构建项目依赖
+#1.手动构建源项目依赖
+git clone https://github.com/Xeno-Gen/Fold.AI.git
 cd fold
 npm install
-Node bin/server.js
+npm run dev
 
-#2.Windows用户使用`依赖安装.bat`进行一键启动
+#2.下载发行版本
+
+Windows用户使用`依赖安装.bat`进行一键启动
 双击.bat
 
-#3.Linux / MacOs使用.sh脚本进行依赖安装和启动
+Linux / MacOs使用.sh脚本进行依赖安装和启动
 双击.sh
 ```
 
