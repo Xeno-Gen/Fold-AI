@@ -137,7 +137,16 @@ module.exports = function(context) {
 
         const execTimeout = timeout || 30000;
         const fs = require('fs');
+        const path = require('path');
         let workDir = workingDirectory || process.cwd();
+        // 'cwd' 映射到项目实际工作目录
+        if (workDir === 'cwd') {
+            workDir = path.join(__dirname, '../../../cwd');
+        }
+        // 相对路径转为绝对路径
+        if (!path.isAbsolute(workDir)) {
+            workDir = path.resolve(workDir);
+        }
         // 确保工作目录存在，否则回退到进程 cwd
         if (!fs.existsSync(workDir)) {
             try { fs.mkdirSync(workDir, { recursive: true }); } catch (e) { workDir = process.cwd(); }

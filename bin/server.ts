@@ -10,7 +10,7 @@ import { chatRouter, setSystemVersion } from '../lib/routes/chat';
 import { configRouter, getDefaultWorkDir } from '../lib/routes/config';
 import { providersRouter, setProviders } from '../lib/routes/providers';
 import { chatsRouter } from '../lib/routes/chats';
-import { initUserMiddleware, setDefaultSystemPrompt } from '../lib/user/manager';
+import { initUserMiddleware, setDefaultSystemPrompt, getUserConfig } from '../lib/user/manager';
 import { setDefaultParams } from '../lib/routes/config';
 import { uploadRouter } from '../lib/routes/upload';
 import { downloadRouter } from '../lib/routes/download';
@@ -95,9 +95,25 @@ app.use('/api', storageRouter);
 app.use('/api', pluginsRouter);
 const loadedPlugins = initPlugins(pluginsRouter);
 
+// 初始化检查：用户已选择提供商就算完成，Key 可稍后配置
+function isUserInitialized(userToken: string): boolean {
+    try {
+        const config = getUserConfig(userToken);
+        return !!config.currentProvider;
+    } catch (e) {
+        return false;
+    }
+}
+
+// 初始化状态查询
+app.get('/api/init/status', (req, res) => {
+    res.json({ initialized: isUserInitialized(req.userToken!) });
+});
+
 // 安全解析工作目录路径
-function resolveWorkPath(subPath: string): string {
-    const base = getDefaultWorkDir();
+function resolveWorkPath(subPath: string, workDir?: string): string {
+    const base = workDir || getDefaultWorkDir();
+    if (!fs.existsSync(base)) fs.mkdirSync(base, { recursive: true });
     if (!subPath) return base;
     const safe = path.normalize(subPath).replace(/^(\.\.(\/|\\|$))+/, '');
     const resolved = path.join(base, safe);
@@ -108,7 +124,8 @@ function resolveWorkPath(subPath: string): string {
 // 浏览工作目录
 app.get('/api/files/browse', (req, res) => {
     try {
-        const dirPath = resolveWorkPath(req.query.dir as string || '');
+        const workDir = (req.query.workingDirectory as string) || undefined;
+        const dirPath = resolveWorkPath(req.query.dir as string || '', workDir);
         if (!fs.existsSync(dirPath)) return res.status(404).json({ error: '目录不存在' });
         const stat = fs.statSync(dirPath);
         if (!stat.isDirectory()) return res.status(400).json({ error: '不是目录' });
@@ -120,7 +137,7 @@ app.get('/api/files/browse', (req, res) => {
             if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
             return a.name.localeCompare(b.name);
         });
-        const base = getDefaultWorkDir();
+        const base = workDir || getDefaultWorkDir();
         const relPath = dirPath.startsWith(base) ? dirPath.substring(base.length).replace(/\\/g, '/') || '/' : '/';
         res.json({ path: relPath, items });
     } catch (e: any) {
@@ -131,7 +148,8 @@ app.get('/api/files/browse', (req, res) => {
 // 读取工作目录文件
 app.get('/api/files/read', (req, res) => {
     try {
-        const filePath = resolveWorkPath(req.query.file as string || '');
+        const workDir = (req.query.workingDirectory as string) || undefined;
+        const filePath = resolveWorkPath(req.query.file as string || '', workDir);
         if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件不存在' });
         const stat = fs.statSync(filePath);
         if (stat.isDirectory()) return res.status(400).json({ error: '不能读取目录' });
@@ -160,14 +178,21 @@ app.get('/chat/:token', (req, res) => {
             const chat = chats.find((c: any) => c.token === req.params.token);
             if (chat) {
                 const chatJson = JSON.stringify(chat).replace(/</g, '\\u003c');
-                html = html.replace('<script src="/intro.js"></script>', '<script>window.__CHAT_DATA__=' + chatJson + ';window.__CHAT_TOKEN__="' + req.params.token + '";</script><script src="/intro.js"></script>');
+                html = html.replace('<script src="/intro.js"></script>\n\t<script src="/chat.js"></script>\n\t<script src="/slash.js"></script>', '<script>window.__CHAT_DATA__=' + chatJson + ';window.__CHAT_TOKEN__="' + req.params.token + '";</script><script src="/intro.js"></script>\n\t<script src="/chat.js"></script>\n\t<script src="/slash.js"></script>');
                 return res.send(html);
             }
         }
     } catch (e) {}
     // 未找到对话，也标记 token 供前端读取
-    html = html.replace('<script src="/intro.js"></script>', '<script>window.__CHAT_DATA__=null;window.__CHAT_TOKEN__="' + req.params.token + '";</script><script src="/intro.js"></script>');
+    html = html.replace('<script src="/intro.js"></script>\n\t<script src="/chat.js"></script>\n\t<script src="/slash.js"></script>', '<script>window.__CHAT_DATA__=null;window.__CHAT_TOKEN__="' + req.params.token + '";</script><script src="/intro.js"></script>\n\t<script src="/chat.js"></script>\n\t<script src="/slash.js"></script>');
     res.send(html);
+});
+
+app.get('/', (req, res) => {
+    if (!isUserInitialized(req.userToken!)) {
+        return res.sendFile(path.join(__dirname, '../static/init.html'));
+    }
+    res.sendFile(path.join(__dirname, '../static/intro.html'));
 });
 
 app.get('*', (req, res) => {

@@ -2,17 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { getAppConfig } from '../parser/configparser';
+import { getSystemPrompt } from '../parser/configparser';
 
 const DATA_DIR = path.join(__dirname, '../../data/users');
 
-// 从 config/config.json 读取基础系统提示词
+// 从 config/prompts/*.md 读取基础系统提示词
 export function getDefaultSystemPrompt(): string {
     try {
-        const appConfig = getAppConfig();
-        if (appConfig && appConfig.system) {
-            return appConfig.system;
-        }
+        return getSystemPrompt();
     } catch (e) {}
     return '';
 }

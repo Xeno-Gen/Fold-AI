@@ -2,175 +2,277 @@ module.exports = function(context) {
     const express = require('express');
     const fs = require('fs');
     const path = require('path');
+    const multer = require('multer');
     const router = express.Router();
 
-    const WORK_DIR = path.join(__dirname, '../../../cwd');
+    const DEFAULT_WORK_DIR = path.join(__dirname, '../../../cwd');
     const HISTORY_DIR = path.join(__dirname, '../../data/plugin_data/FileOperations/history');
 
     function ensureDir(dir) {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     }
-    ensureDir(WORK_DIR);
+    ensureDir(DEFAULT_WORK_DIR);
     ensureDir(HISTORY_DIR);
 
-    // Resolve file path with path traversal protection
-    function resolvePath(filename) {
-        // 如果传入的是绝对路径，尝试去掉 WORK_DIR 前缀，否则只取文件名
+    function resolvePath(filename, workDir) {
+        workDir = workDir || DEFAULT_WORK_DIR;
+        ensureDir(workDir);
         var normalized = path.normalize(filename);
-        var workDirNormalized = path.normalize(WORK_DIR);
+        var workDirNormalized = path.normalize(workDir);
         if (normalized.startsWith(workDirNormalized)) {
             normalized = normalized.substring(workDirNormalized.length).replace(/^[\/\\]+/, '');
         } else if (path.isAbsolute(normalized)) {
-            // 其他绝对路径，只取文件名
             normalized = path.basename(filename);
         }
         const safe = normalized.replace(/^(\.\.(\/|\\|$))+/, '');
-        return path.join(WORK_DIR, safe);
+        return path.join(workDir, safe);
     }
 
-    // Get user history file
+    // ── Local .bak backup ──
+    // Backups are stored as <file>.bak in the same directory as the source file.
+    function createBak(filePath) {
+        if (!fs.existsSync(filePath)) return null;
+        try {
+            var content = fs.readFileSync(filePath, 'utf-8');
+            var bakPath = filePath + '.bak';
+            fs.writeFileSync(bakPath, content, 'utf-8');
+            return bakPath;
+        } catch (e) {
+            context.logger.error('FileOperations createBak failed: ' + e.message);
+            return null;
+        }
+    }
+
+    function restoreFromBak(filePath) {
+        var bakPath = filePath + '.bak';
+        if (!fs.existsSync(bakPath)) return null;
+        try {
+            var content = fs.readFileSync(bakPath, 'utf-8');
+            fs.writeFileSync(filePath, content, 'utf-8');
+            return { size: Buffer.byteLength(content, 'utf-8') };
+        } catch (e) {
+            context.logger.error('FileOperations restoreFromBak failed: ' + e.message);
+            return null;
+        }
+    }
+
+    function removeBak(filePath) {
+        var bakPath = filePath + '.bak';
+        try { if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath); } catch (e) {}
+    }
+
+    // ── History ──
     function getHistoryFile(userToken) {
         return path.join(HISTORY_DIR, userToken + '.json');
     }
 
     function readHistory(userToken) {
         try {
-            const f = getHistoryFile(userToken);
+            var f = getHistoryFile(userToken);
             if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf-8'));
         } catch (e) {}
         return [];
     }
 
     function addHistory(userToken, entry) {
-        const h = readHistory(userToken);
-        h.push({ ...entry, time: new Date().toISOString(), id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
+        var h = readHistory(userToken);
+        h.push(Object.assign({}, entry, {
+            time: new Date().toISOString(),
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+        }));
         fs.writeFileSync(getHistoryFile(userToken), JSON.stringify(h, null, 2), 'utf-8');
         return h;
     }
 
-    // ── list files ──
-    router.get('/files', (req, res) => {
+    // ── List files ──
+    router.get('/files', function(req, res) {
         try {
-            const files = fs.readdirSync(WORK_DIR).filter(f => {
-                const stat = fs.statSync(path.join(WORK_DIR, f));
-                return stat.isFile();
-            }).map(f => {
-                const stat = fs.statSync(path.join(WORK_DIR, f));
+            var workDir = req.query.workingDirectory || DEFAULT_WORK_DIR;
+            ensureDir(workDir);
+            var files = fs.readdirSync(workDir).filter(function(f) {
+                if (f.endsWith('.bak')) return false; // hide .bak files from listing
+                return fs.statSync(path.join(workDir, f)).isFile();
+            }).map(function(f) {
+                var stat = fs.statSync(path.join(workDir, f));
                 return { name: f, size: stat.size, mtime: stat.mtime.toISOString() };
             });
-            res.json({ files });
+            res.json({ files: files });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    // ── get file content ──
-    router.get('/file', (req, res) => {
+    // ── Get file content ──
+    router.get('/file', function(req, res) {
         try {
-            const name = req.query.name;
+            var name = req.query.name;
             if (!name) return res.status(400).json({ error: '缺少文件名' });
-            const filePath = resolvePath(name);
+            var workDir = req.query.workingDirectory || DEFAULT_WORK_DIR;
+            var filePath = resolvePath(name, workDir);
             if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件不存在' });
-            const content = fs.readFileSync(filePath, 'utf-8');
-            const lines = content.split('\n');
-            res.json({ name, content, lines: lines.length, size: Buffer.byteLength(content, 'utf-8'), mtime: fs.statSync(filePath).mtime.toISOString() });
+            var content = fs.readFileSync(filePath, 'utf-8');
+            res.json({ name: name, content: content, lines: content.split('\n').length, size: Buffer.byteLength(content, 'utf-8'), mtime: fs.statSync(filePath).mtime.toISOString() });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    // ── get history ──
-    router.get('/history', (req, res) => {
+    // ── List .bak backups in work dir ──
+    router.get('/backups', function(req, res) {
+        try {
+            var workDir = req.query.workingDirectory || DEFAULT_WORK_DIR;
+            ensureDir(workDir);
+            var baks = fs.readdirSync(workDir).filter(function(f) { return f.endsWith('.bak'); }).map(function(f) {
+                var stat = fs.statSync(path.join(workDir, f));
+                var origName = f.slice(0, -4);
+                return {
+                    file: origName,
+                    backupFile: f,
+                    time: stat.mtime.toISOString(),
+                    size: stat.size
+                };
+            }).sort(function(a, b) { return b.time.localeCompare(a.time); });
+            res.json({ backups: baks });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ── Restore from .bak ──
+    router.post('/backup/restore/:file', function(req, res) {
+        try {
+            var name = decodeURIComponent(req.params.file);
+            var workDir = req.body.workingDirectory || DEFAULT_WORK_DIR;
+            var filePath = resolvePath(name, workDir);
+            var result = restoreFromBak(filePath);
+            if (!result) return res.status(404).json({ error: '备份文件不存在 (' + name + '.bak)' });
+            addHistory(req.userToken, { type: 'restore', file: name, from: 'bak' });
+            res.json({ success: true, file: name, size: result.size });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ── Get history ──
+    router.get('/history', function(req, res) {
         res.json({ history: readHistory(req.userToken) });
     });
 
-    // ── rollback ──
-    router.post('/rollback/:id', (req, res) => {
+    // ── Rollback ──
+    router.post('/rollback/:id', function(req, res) {
         try {
-            const h = readHistory(req.userToken);
-            const entry = h.find(e => e.id === req.params.id);
+            var h = readHistory(req.userToken);
+            var entry = h.find(function(e) { return e.id === req.params.id; });
             if (!entry) return res.status(404).json({ error: '历史记录不存在' });
 
-            const filePath = resolvePath(entry.file);
+            var workDir = req.body.workingDirectory || DEFAULT_WORK_DIR;
+            var filePath = resolvePath(entry.file, workDir);
+
+            // Try .bak first
+            if (entry.hasBak) {
+                var result = restoreFromBak(filePath);
+                if (result) return res.json({ success: true, file: entry.file, from: 'bak' });
+            }
+
+            // Fallback to previousContent
             if (entry.type === 'add' || entry.type === 'mod') {
-                // Restore previous content
                 if (entry.previousContent === null) {
-                    // File didn't exist before — delete it
                     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
                 } else {
                     fs.writeFileSync(filePath, entry.previousContent, 'utf-8');
                 }
-            } else if (entry.type === 'del') {
-                if (entry.previousContent === null) {
-                    // Was a line deletion, can't restore full file — restore from backup
-                    return res.status(400).json({ error: '行删除无法回滚，请手动恢复' });
-                }
-                fs.writeFileSync(filePath, entry.previousContent, 'utf-8');
+                return res.json({ success: true, file: entry.file, from: 'history' });
             }
-            res.json({ success: true });
+
+            return res.status(400).json({ error: '无法回滚此操作' });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    // ── execute: parse tag format and execute ──
-    router.post('/execute', (req, res) => {
+    // ── Execute: parse tag format and execute ──
+    router.post('/execute', function(req, res) {
         try {
-            const { command } = req.body;
+            var command = req.body.command;
+            var workDir = req.body.workingDirectory || DEFAULT_WORK_DIR;
             if (!command) return res.status(400).json({ error: '缺少命令' });
 
-            const results = [];
-            // Split by tag boundaries: find each top-level tag and process it
-            const tagRegex = /<(add|mod)>([\s\S]*?)<\/\1>/gi;
-            let match;
-            let lastIndex = 0;
+            var results = [];
+            // Support: add, mod, del, res (restore from .bak)
+            var tagRegex = /<(add|mod|del|res)>([\s\S]*?)<\/\1>/gi;
+            var match;
 
             while ((match = tagRegex.exec(command)) !== null) {
-                const tagType = match[1].toLowerCase();
-                const body = match[2];
+                var tagType = match[1].toLowerCase();
+                var body = match[2];
 
-                switch (tagType) {
-                    case 'add': {
-                        const nlIdx = body.indexOf('\n');
-                        if (nlIdx === -1) { results.push({ type: 'add', error: '格式错误: 需要换行分隔文件名和内容' }); break; }
-                        const fname = body.substring(0, nlIdx).trim();
-                        const content = body.substring(nlIdx + 1);
-                        const filePath = resolvePath(fname);
-                        let previousContent = null;
-                        if (fs.existsSync(filePath)) {
-                            previousContent = fs.readFileSync(filePath, 'utf-8');
-                        }
-                        fs.writeFileSync(filePath, content, 'utf-8');
-                        addHistory(req.userToken, { type: 'add', file: fname, previousContent });
-                        results.push({ type: 'add', file: fname, written: Buffer.byteLength(content, 'utf-8'), action: previousContent !== null ? 'updated' : 'created' });
-                        break;
+                if (tagType === 'add') {
+                    var nlIdx = body.indexOf('\n');
+                    if (nlIdx === -1) { results.push({ type: 'add', error: '格式错误: 需要换行分隔文件名和内容' }); continue; }
+                    var fname = body.substring(0, nlIdx).trim();
+                    var content = body.substring(nlIdx + 1);
+                    var filePath = resolvePath(fname, workDir);
+                    var previousContent = null;
+                    var hasBak = false;
+                    if (fs.existsSync(filePath)) {
+                        previousContent = fs.readFileSync(filePath, 'utf-8');
+                        hasBak = !!createBak(filePath);
                     }
-                    case 'mod': {
-                        const nlIdx = body.indexOf('\n');
-                        if (nlIdx === -1) { results.push({ type: 'mod', error: '格式错误: 需要换行分隔文件名和内容' }); break; }
-                        const fname = body.substring(0, nlIdx).trim();
-                        const rest = body.substring(nlIdx + 1).trim();
-                        // Parse: <line_number> OR <start~end> followed by newline and replacement content
-                        const tagMatch = rest.match(/^<(\d+(?:\s*~\s*\d+)?)>\s*\n?([\s\S]*)$/);
-                        if (!tagMatch) { results.push({ type: 'mod', error: '格式错误: 需要 <行号> 标记' }); break; }
-                        const rangeStr = tagMatch[1];
-                        const newContent = tagMatch[2] || '';
-                        const rangeParts = rangeStr.split('~').map(s => parseInt(s.trim()));
-                        const startLine = rangeParts[0];
-                        const endLine = rangeParts[1] || startLine;
+                    fs.writeFileSync(filePath, content, 'utf-8');
+                    addHistory(req.userToken, { type: 'add', file: fname, previousContent: previousContent, hasBak: hasBak });
+                    results.push({ type: 'add', file: fname, written: Buffer.byteLength(content, 'utf-8'), action: previousContent !== null ? 'updated' : 'created' });
+                }
+                else if (tagType === 'mod') {
+                    var nlIdx = body.indexOf('\n');
+                    if (nlIdx === -1) { results.push({ type: 'mod', error: '格式错误: 需要换行分隔文件名和内容' }); continue; }
+                    var firstLine = body.substring(0, nlIdx).trim();
+                    var rest = body.substring(nlIdx + 1);
+                    // Format: (文件路径)|(行号,行号)
+                    var headerMatch = firstLine.match(/^\(([^)]+)\)\s*\|\s*\((\d+)\s*,\s*(\d+)\)$/);
+                    if (!headerMatch) { results.push({ type: 'mod', error: '格式错误: 需要 (文件路径)|(起始行,结束行) 格式' }); continue; }
+                    var fname = headerMatch[1].trim();
+                    var startLine = parseInt(headerMatch[2]);
+                    var endLine = parseInt(headerMatch[3]);
+                    var newContent = rest;
 
-                        const filePath = resolvePath(fname);
-                        if (!fs.existsSync(filePath)) { results.push({ type: 'mod', file: fname, error: '文件不存在' }); break; }
-                        const prevContent = fs.readFileSync(filePath, 'utf-8');
-                        const allLines = prevContent.split('\n');
-                        const s = Math.max(1, startLine) - 1;
-                        const e = Math.min(allLines.length, endLine);
-                        const newLines = newContent.split('\n');
-                        allLines.splice(s, e - s, ...newLines);
-                        fs.writeFileSync(filePath, allLines.join('\n'), 'utf-8');
-                        addHistory(req.userToken, { type: 'mod', file: fname, range: `${startLine}~${endLine}`, previousContent: prevContent });
-                        results.push({ type: 'mod', file: fname, range: `${startLine}~${endLine}`, replaced: e - s, with: newLines.length });
-                        break;
+                    var filePath = resolvePath(fname, workDir);
+                    if (!fs.existsSync(filePath)) { results.push({ type: 'mod', file: fname, error: '文件不存在' }); continue; }
+                    var prevContent = fs.readFileSync(filePath, 'utf-8');
+                    var hasBak = !!createBak(filePath);
+                    var allLines = prevContent.split('\n');
+                    var s = Math.max(1, startLine) - 1;
+                    var e = Math.min(allLines.length, endLine);
+                    var newLines = newContent.split('\n');
+                    allLines.splice(s, e - s, newLines);
+                    fs.writeFileSync(filePath, allLines.join('\n'), 'utf-8');
+                    addHistory(req.userToken, { type: 'mod', file: fname, range: startLine + '~' + endLine, previousContent: prevContent, hasBak: hasBak });
+                    results.push({ type: 'mod', file: fname, range: startLine + '~' + endLine, replaced: e - s, with: newLines.length });
+                }
+                else if (tagType === 'del') {
+                    var fname = body.trim();
+                    if (!fname) { results.push({ type: 'del', error: '格式错误: 需要文件名' }); continue; }
+                    var filePath = resolvePath(fname, workDir);
+                    if (!fs.existsSync(filePath)) { results.push({ type: 'del', file: fname, error: '文件不存在' }); continue; }
+                    var hasBak = !!createBak(filePath);
+                    var stat = fs.statSync(filePath);
+                    if (stat.isDirectory()) {
+                        fs.rmdirSync(filePath, { recursive: true });
+                    } else {
+                        fs.unlinkSync(filePath);
+                    }
+                    addHistory(req.userToken, { type: 'del', file: fname, previousContent: null, hasBak: hasBak });
+                    results.push({ type: 'del', file: fname, action: 'deleted', bakCreated: hasBak });
+                }
+                else if (tagType === 'res') {
+                    var fname = body.trim();
+                    if (!fname) { results.push({ type: 'res', error: '格式错误: 需要文件名' }); continue; }
+                    var filePath = resolvePath(fname, workDir);
+                    var result = restoreFromBak(filePath);
+                    if (!result) {
+                        results.push({ type: 'res', file: fname, error: '备份文件不存在 (' + fname + '.bak)' });
+                    } else {
+                        addHistory(req.userToken, { type: 'res', file: fname, from: 'bak' });
+                        results.push({ type: 'res', file: fname, action: 'restored', size: result.size });
                     }
                 }
             }
@@ -182,23 +284,83 @@ module.exports = function(context) {
         }
     });
 
-    // ── convenience: write file directly with UTF-8 ──
-    router.post('/write/:name', (req, res) => {
+    // ── Write file ──
+    router.post('/write/:name', function(req, res) {
         try {
-            const name = decodeURIComponent(req.params.name);
-            const { content } = req.body;
+            var name = decodeURIComponent(req.params.name);
+            var content = req.body.content;
+            var workDir = req.body.workingDirectory || DEFAULT_WORK_DIR;
             if (content === undefined) return res.status(400).json({ error: '缺少内容' });
-            const filePath = resolvePath(name);
-            let previousContent = null;
-            if (fs.existsSync(filePath)) previousContent = fs.readFileSync(filePath, 'utf-8');
+            var filePath = resolvePath(name, workDir);
+            var previousContent = null;
+            var hasBak = false;
+            if (fs.existsSync(filePath)) {
+                previousContent = fs.readFileSync(filePath, 'utf-8');
+                hasBak = !!createBak(filePath);
+            }
             fs.writeFileSync(filePath, content, 'utf-8');
-            addHistory(req.userToken, { type: 'add', file: name, previousContent });
+            addHistory(req.userToken, { type: 'add', file: name, previousContent: previousContent, hasBak: hasBak });
             res.json({ success: true, file: name, action: previousContent !== null ? 'updated' : 'created' });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    context.logger.info('FileOperations plugin routes registered');
-    return { router };
+    // ── Upload file ──
+    var upload = multer({
+        storage: multer.diskStorage({
+            destination: function(req, file, cb) {
+                var workDir = req.body.workingDirectory || DEFAULT_WORK_DIR;
+                ensureDir(workDir);
+                cb(null, workDir);
+            },
+            filename: function(req, file, cb) { cb(null, file.originalname); }
+        }),
+        limits: { fileSize: 50 * 1024 * 1024 }
+    });
+
+    router.post('/upload', upload.single('file'), function(req, res) {
+        try {
+            if (!req.file) return res.status(400).json({ error: '没有文件' });
+            var name = req.file.originalname;
+            var filePath = path.join(req.file.destination, name);
+            var previousContent = null;
+            var hasBak = false;
+            if (fs.existsSync(filePath) && req.file.path !== filePath) {
+                previousContent = fs.readFileSync(filePath, 'utf-8');
+                hasBak = !!createBak(filePath);
+            }
+            addHistory(req.userToken, { type: 'upload', file: name, previousContent: previousContent, hasBak: hasBak });
+            res.json({ success: true, fileName: name, size: req.file.size, path: req.file.path });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ── Delete file ──
+    router.post('/delete', function(req, res) {
+        try {
+            var filename = req.body.filename;
+            var workDir = req.body.workingDirectory || DEFAULT_WORK_DIR;
+            if (!filename) return res.status(400).json({ error: '缺少文件名' });
+            var filePath = resolvePath(filename, workDir);
+            if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件不存在' });
+
+            var stat = fs.statSync(filePath);
+            if (!stat.isDirectory()) {
+                var hasBak = !!createBak(filePath);
+                fs.unlinkSync(filePath);
+                addHistory(req.userToken, { type: 'del', file: filename, previousContent: null, hasBak: hasBak });
+            } else {
+                fs.rmdirSync(filePath, { recursive: true });
+                addHistory(req.userToken, { type: 'del', file: filename, previousContent: null, hasBak: false });
+            }
+            res.json({ success: true, file: filename });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    context.logger.info('FileOperations plugin routes registered (local .bak)');
+    return { router: router };
 };

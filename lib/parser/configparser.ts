@@ -1,66 +1,33 @@
 import fs from 'fs';
 import path from 'path';
-import { logger } from '../logger';
 
 const CONFIG_DIR = path.join(__dirname, '../../Config');
 
 /**
- * 读取并解析 JSON 配置文件
+ * 从 config/prompts/ 目录读取 .md 文件，按文件名排序拼接为系统提示词
  */
-function readJsonFile(filename: string): any {
-    const filePath = path.join(CONFIG_DIR, filename);
-    try {
-        if (fs.existsSync(filePath)) {
-            const content = fs.readFileSync(filePath, 'utf-8');
-            return JSON.parse(content);
-        }
-    } catch (e) {
-        logger.error(`config parse: failed to read ${filename}: ` + e);
+export function getSystemPrompt(): string {
+    const promptsDir = path.join(CONFIG_DIR, 'prompts');
+    if (!fs.existsSync(promptsDir)) return '';
+    const files = fs.readdirSync(promptsDir)
+        .filter(f => f.endsWith('.md'))
+        .sort();
+    return files.map(f => {
+        return fs.readFileSync(path.join(promptsDir, f), 'utf-8').trimEnd();
+    }).join('\n');
+}
+
+/**
+ * 从 config/Plugin/ 目录读取 .md 文件，返回键值对 { 文件名: 内容 }
+ */
+export function getPluginPrompts(): Record<string, string> {
+    const pluginDir = path.join(CONFIG_DIR, 'Plugin');
+    if (!fs.existsSync(pluginDir)) return {};
+    const files = fs.readdirSync(pluginDir).filter(f => f.endsWith('.md'));
+    const result: Record<string, string> = {};
+    for (const f of files) {
+        const key = f.replace(/\.md$/, '');
+        result[key] = fs.readFileSync(path.join(pluginDir, f), 'utf-8').trimEnd();
     }
-    return null;
-}
-
-/**
- * 获取 prompts 配置
- */
-export function getPrompts(): any {
-    return readJsonFile('prompts.json') || {};
-}
-
-/**
- * 获取应用配置
- */
-export function getAppConfig(): any {
-    return readJsonFile('config.json') || {};
-}
-
-/**
- * 获取主题配置
- */
-export function getThemeConfig(): any {
-    return readJsonFile('theme.json') || {};
-}
-
-/**
- * 获取指定插件的系统提示词
- */
-export function getPluginPrompt(pluginId: string): string {
-    const prompts = getPrompts();
-    return prompts[pluginId]?.system_prompt || '';
-}
-
-/**
- * 获取思考模式配置
- */
-export function getThinkModes(): any {
-    const prompts = getPrompts();
-    return prompts.think_modes || {};
-}
-
-/**
- * 获取思考模式提示词
- */
-export function getThinkModePrompt(mode: string): string {
-    const modes = getThinkModes();
-    return modes[mode]?.prompt || '';
+    return result;
 }

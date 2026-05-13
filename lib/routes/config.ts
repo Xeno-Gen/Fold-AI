@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getUserConfig, saveUserConfig, getDefaultSystemPrompt } from '../user/manager';
-import { getAppConfig } from '../parser/configparser';
+import { getSystemPrompt, getPluginPrompts } from '../parser/configparser';
 import path from 'path';
 import fs from 'fs';
 
@@ -37,8 +37,7 @@ configRouter.get('/config', (req: Request, res: Response) => {
     for (const [provider, keys] of Object.entries(userConfig.providerKeys)) {
         keysStatus[provider] = Array.isArray(keys) && keys.length > 0;
     }
-    const appConfig = getAppConfig();
-    const baseSystemPrompt = (appConfig && appConfig.system) || '';
+    const baseSystemPrompt = getSystemPrompt();
     res.json({
         defaultParams: userConfig.defaultParams,
         currentProvider: userConfig.currentProvider,
@@ -50,6 +49,7 @@ configRouter.get('/config', (req: Request, res: Response) => {
         pureMode: userConfig.pureMode || false,
         baseSystemPrompt: baseSystemPrompt,
         baseSystemTokenCount: estimateTokens(baseSystemPrompt),
+        pluginPrompts: getPluginPrompts(),
         workDir: getDefaultWorkDir(),
     });
 });

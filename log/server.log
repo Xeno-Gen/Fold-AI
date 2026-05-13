@@ -1,0 +1,20 @@
+[2026-05-13 22:30:35] [INFO] System version: Windows_NT 10.0.26200 (x64)
+[2026-05-13 22:30:35] [INFO] CommandExecution plugin routes registered
+[2026-05-13 22:30:35] [INFO] plugin CommandExecution: loaded (v1.0.0)
+[2026-05-13 22:30:35] [INFO] FileOperations plugin routes registered (local .bak)
+[2026-05-13 22:30:35] [INFO] plugin FileOperations: loaded (v1.0.0)
+[2026-05-13 22:30:35] [INFO] Memory plugin routes registered (per-user)
+[2026-05-13 22:30:35] [INFO] plugin Memory: loaded (v1.0.0)
+[2026-05-13 22:30:35] [INFO] registered backward compat route: POST /plugin/command/execute
+[2026-05-13 22:30:35] [INFO] plugin platform: 3 plugin(s) loaded
+Error: listen EADDRINUSE: address already in use 0.0.0.0:17923
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at node:net:2274:7
+    at processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 17923
+}

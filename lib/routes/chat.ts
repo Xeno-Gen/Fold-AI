@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getUserConfig, incrementUsage } from '../user/manager';
 import { getUserProviderKey, getUserProviderUrl, getProviders } from './providers';
-import { getAppConfig } from '../parser/configparser';
+import { getSystemPrompt } from '../parser/configparser';
 import { logger } from '../logger';
 
 export const chatRouter = Router();
@@ -234,9 +234,8 @@ chatRouter.post('/chat', async (req: Request, res: Response) => {
 
         if (!isAnthropicFormat) {
             // OpenAI 格式：system prompt 合并到消息中
-            // 读取基础系统提示词 (config.json)
-            const appConfig = getAppConfig();
-            const basePrompt = (appConfig && appConfig.system) || '';
+            // 从 config/prompts/*.md 读取基础系统提示词
+            const basePrompt = getSystemPrompt();
             let effectivePrompt = '';
             // 非纯净模式时加入基础提示词
             if (!userConfig.pureMode && basePrompt) {
@@ -248,7 +247,7 @@ chatRouter.post('/chat', async (req: Request, res: Response) => {
                     : userConfig.systemPrompt;
             }
             if (systemVersion) {
-                effectivePrompt = `[系统版本: ${systemVersion}]\n${effectivePrompt}`;
+                effectivePrompt = `[用户使用的系统版本: ${systemVersion}]\n${effectivePrompt}`;
             }
             if (effectivePrompt) {
                 if (finalMessages.length > 0 && finalMessages[0].role === 'system') {
@@ -411,9 +410,8 @@ chatRouter.post('/chat', async (req: Request, res: Response) => {
             const { system, messages: anthropicMessages } = toAnthropicMessages(finalMessages);
 
             // 注入系统版本和用户 systemPrompt 到 Anthropic system 字段
-            // 读取基础系统提示词 (config.json)
-            const appConfig = getAppConfig();
-            const basePrompt = (appConfig && appConfig.system) || '';
+            // 从 config/prompts/*.md 读取基础系统提示词
+            const basePrompt = getSystemPrompt();
             let effectiveSystem = system || '';
             // 非纯净模式时加入基础提示词
             if (!userConfig.pureMode && basePrompt) {
@@ -428,8 +426,8 @@ chatRouter.post('/chat', async (req: Request, res: Response) => {
             }
             if (systemVersion) {
                 effectiveSystem = effectiveSystem
-                    ? `[系统版本: ${systemVersion}]\n${effectiveSystem}`
-                    : `[系统版本: ${systemVersion}]`;
+                    ? `[用户使用的系统版本: ${systemVersion}]\n${effectiveSystem}`
+                    : `[用户使用的系统版本: ${systemVersion}]`;
             }
 
             const anthropicBody: any = {

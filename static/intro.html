@@ -167,6 +167,8 @@
         }
         .sidebar-content{display:none;flex-direction:column;gap:6px;width:100%;overflow-y:auto;flex:1;padding-right:12px;}
         .sidebar-left.visible .sidebar-content{display:flex;}
+        .sidebar-content .sidebar-settings-btn{display:none;}
+        .sidebar-left.visible .sidebar-content .sidebar-settings-btn{display:flex;}
         .sidebar-logo{
             font-size:20px;letter-spacing:-0.5px;color:#1a1a1a;margin-bottom:16px;cursor:pointer;
             user-select:none;display:none;white-space:nowrap;
@@ -714,6 +716,26 @@
             margin:60px auto 0;background:var(--bg,#fff);overflow:hidden;
         }
         .files-panel.active{display:flex;animation:settingsIn 0.2s ease;}
+        .files-workdir-row{
+            display:flex;align-items:center;gap:8px;
+            padding:8px 20px;border-bottom:1px solid var(--border,#eee);
+            flex-shrink:0;
+        }
+        .files-workdir-input{
+            flex:1;padding:6px 10px;border:1px solid #e8e5df;border-radius:6px;
+            font-size:12px;background:#fafaf7;color:#3c3630;outline:none;
+            font-family:'SF Mono','Monaco','Consolas',monospace;
+        }
+        .files-workdir-input:focus{border-color:#c4bdb2;background:#fff;}
+        .files-workdir-reset{
+            padding:6px 12px;border:1px solid #e8e5df;border-radius:6px;
+            background:#fafaf7;color:#9b968b;font-size:12px;cursor:pointer;white-space:nowrap;
+        }
+        .files-workdir-reset:hover{background:#f0ede6;color:#6b6358;}
+        [data-theme="dark"] .files-workdir-input{background:#1c1c1c;color:#d0d0d0;border-color:#333;}
+        [data-theme="dark"] .files-workdir-input:focus{border-color:#555;background:#222;}
+        [data-theme="dark"] .files-workdir-reset{background:#1c1c1c;color:#888;border-color:#333;}
+        [data-theme="dark"] .files-workdir-reset:hover{background:#2a2a2a;color:#aaa;}
         .files-panel-toolbar{
             display:flex;align-items:center;gap:10px;
             padding:8px 20px;border-bottom:1px solid var(--border,#eee);
@@ -745,6 +767,8 @@
             transition:background 0.15s;font-size:13px;color:#333;
         }
         .file-list-item:hover{background:#f5f5f5;}
+        .backup-restore-btn:hover{background:#e8e8e8;}
+        .backup-restore-btn:disabled{opacity:0.4;cursor:not-allowed;}
         .file-list-item .file-icon{
             flex-shrink:0;
         }
@@ -752,6 +776,18 @@
         .file-list-item .file-icon.file{color:#8b9d83;}
         .file-list-item .file-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
         .file-list-item .file-meta{font-size:11px;color:#999;flex-shrink:0;margin-left:8px;}
+        .file-action-btn{
+            width:28px;height:28px;border-radius:6px;border:none;
+            background:transparent;cursor:pointer;color:#bbb;
+            display:flex;align-items:center;justify-content:center;
+            transition:all 0.15s;flex-shrink:0;padding:0;
+        }
+        .file-action-btn:hover{background:#f0f0f0;color:#555;}
+        .file-preview-btn:hover{color:#1a6bc0;}
+        .file-delete-btn:hover{color:#e74c3c;background:#fef0f0;}
+        [data-theme="dark"] .file-action-btn:hover{background:#2a2a2a;}
+        [data-theme="dark"] .file-preview-btn:hover{color:#5b9bd5;}
+        [data-theme="dark"] .file-delete-btn:hover{color:#e74c3c;background:#2a2020;}
 
         [data-theme="dark"] .sidebar-files-fab{background:#1c1c1c;color:#999;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
         [data-theme="dark"] .sidebar-files-fab:hover{background:#2a2a2a;color:#e0e0e0;}
@@ -764,6 +800,7 @@
         [data-theme="dark"] .files-refresh-btn:hover{background:#2a2a2a;color:#e0e0e0;}
         [data-theme="dark"] .file-list-item{color:#ccc;}
         [data-theme="dark"] .file-list-item:hover{background:#1a1a1a;}
+        [data-theme="dark"] .backup-restore-btn:hover{background:#2a2a2a;}
         [data-theme="dark"] .file-list-item .file-icon.folder{color:#d4a853;}
         [data-theme="dark"] .file-list-item .file-icon.file{color:#8b9d83;}
 
@@ -795,19 +832,19 @@
             <button class="new-chat-btn" id="newChatSidebarBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span data-i18n="newChat">新对话</span></button>
             <div class="sidebar-section-title"><span data-i18n="chatHistory">对话历史</span></div>
             <ul class="chat-history-list" id="chatHistoryList"></ul>
+            <button class="sidebar-settings-btn" id="sidebarSettingsBtn" style="margin-top:auto;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span data-i18n="settings">设置</span>
+            </button>
         </div>
-        <button class="sidebar-settings-btn" id="sidebarSettingsBtn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            <span data-i18n="settings">设置</span>
-        </button>
     </aside>
 
     <main class="main-content" id="mainContent">
         <div class="chat-header" id="chatHeader">
-            <span id="chatTitleText" data-i18n="chat">对话</span>
+            <span id="chatTitleText">对话</span>
             <input type="text" id="chatTitleInput" style="display:none;">
         </div>
         <div class="center-initial" id="centerInitial">
@@ -884,10 +921,20 @@
                     </svg>
                 </button>
             </div>
+            <div class="files-workdir-row">
+                <input type="text" id="filesWorkDirInput" class="files-workdir-input" placeholder="工作目录路径，如 D:\claude\cwd" spellcheck="false">
+                <button class="files-workdir-reset" id="filesWorkDirReset" title="恢复默认">默认</button>
+            </div>
             <div class="files-panel-toolbar">
                 <div class="files-breadcrumb" id="filesBreadcrumb"></div>
+                <button class="files-refresh-btn" id="filesUploadBtn" title="上传文件">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </button>
                 <button class="files-refresh-btn" id="filesRefreshBtn" title="刷新">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                </button>
+                <button class="files-refresh-btn" id="filesBackupsBtn" title="备份历史">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                 </button>
             </div>
             <div class="files-panel-body" id="filesPanelBody">
@@ -1010,6 +1057,21 @@
     </div>
 </div>
 
+<!-- 备份面板 -->
+<div class="file-viewer-overlay" id="backupOverlay">
+    <div class="file-viewer-drawer">
+        <div class="file-viewer-header">
+            <h2 id="backupTitle">备份历史</h2>
+            <button class="file-viewer-close" id="backupClose">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="file-viewer-body" id="backupBody"></div>
+    </div>
+</div>
+
 <!-- 文件查看面板 -->
 <div class="file-viewer-overlay" id="fileViewerOverlay">
     <div class="file-viewer-drawer">
@@ -1032,5 +1094,7 @@
 <script src="/lang/en.js"></script>
 <script src="/lang/i18n.js"></script>
 <script src="/intro.js"></script>
+<script src="/chat.js"></script>
+<script src="/slash.js"></script>
 </body>
 </html>

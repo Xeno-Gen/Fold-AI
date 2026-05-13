@@ -186,7 +186,7 @@
 
 .d813de27 {
     color: var(--dsw-alias-label-primary);
-    font-family: var(--ds-font-family-code);
+    font-family: var(--chat-font);
     margin-left: 8px;
     font-size: 12px;
     line-height: 18px;
@@ -214,7 +214,7 @@
 }
 
 ._121d384 + pre code {
-    font-family: var(--ds-font-family-code);
+    font-family: var(--chat-font);
     font-size: 13px;
 }
 
@@ -1435,6 +1435,71 @@ input:checked + .slider::before {
     background: transparent;
 }
 
+/* ========== Markdown 对齐统一 ========== */
+.markdown-body {
+    line-height: 1.7;
+}
+.markdown-body > * {
+    margin-left: 0;
+    margin-right: 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    margin-top: 1.2em;
+    margin-bottom: 0.6em;
+}
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body table,
+.markdown-body pre,
+.markdown-body .code-block-wrapper {
+    margin-top: 0.6em;
+    margin-bottom: 0.6em;
+}
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 1.5em;
+}
+.markdown-body li {
+    margin: 0.2em 0;
+}
+.markdown-body blockquote {
+    border-left: 3px solid #ddd;
+    padding-left: 1em;
+    color: #888;
+}
+.markdown-body table {
+    border-collapse: collapse;
+    width: 100%;
+}
+.markdown-body th,
+.markdown-body td {
+    border: 1px solid #ddd;
+    padding: 6px 10px;
+    text-align: left;
+}
+.markdown-body th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+[data-theme="dark"] .markdown-body th {
+    background: #1a1a1a;
+    border-color: #2a2a2a;
+}
+[data-theme="dark"] .markdown-body td {
+    border-color: #2a2a2a;
+}
+[data-theme="dark"] .markdown-body blockquote {
+    border-left-color: #444;
+    color: #999;
+}
+
 /* ========== 推理模式容器（子项使用 think-block 样式） ========== */
 .reasoning-container {
     display: flex;
@@ -1543,114 +1608,246 @@ input:checked + .slider::before {
 }
 
 /* ========== 插件输出折叠块 ========== */
-.plugin-block {
-    margin: 8px 0;
-    border-radius: 8px;
-    border: 1px solid #e4e0d8;
-    overflow: hidden;
-    font-size: 13px;
+@keyframes plugin-surge {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
 }
-.plugin-block-header {
+@keyframes plugin-dot-pulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.3); }
+}
+.plugin-block {
+    margin: 12px 0;
+    border: none;
+    font-size: 17px;
+}
+.plugin-block.cmd-block .plugin-block-header {
     display: flex;
-    align-items: center;
     gap: 8px;
     padding: 8px 12px;
     cursor: pointer;
+    font-size: 13px;
+}
+.cmd-block-edit:hover {
+    color: #333 !important;
+    background: rgba(0,0,0,0.06);
+}
+[data-theme="dark"] .cmd-block-edit:hover {
+    color: #ccc !important;
+    background: rgba(255,255,255,0.08);
+}
+.plugin-block-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    padding: 2px 0;
+    cursor: pointer;
     user-select: none;
-    background: #f7f5f0;
-    color: #6b6358;
-    font-weight: 500;
+    font-size: 17px;
+    font-weight: 400;
+    position: relative;
+    background: linear-gradient(90deg,
+        #b0aaa0 0%, #b0aaa0 35%,
+        #d5cfc5 45%, #ede8e0 50%,
+        #d5cfc5 55%, #b0aaa0 65%,
+        #b0aaa0 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: plugin-surge 4s ease-in-out infinite;
+}
+.plugin-block-header::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #d5cfc5;
+    margin-right: 8px;
+    flex-shrink: 0;
+    animation: plugin-dot-pulse 2s ease-in-out infinite;
+    -webkit-text-fill-color: initial;
 }
 .plugin-block-header:hover {
-    background: #f0ede6;
+    animation: none;
+    -webkit-text-fill-color: #6b6358;
+    background: none;
 }
-.plugin-block-header svg {
-    flex-shrink: 0;
-    color: #9b968b;
-}
-.plugin-block-title {
-    flex: 1;
-}
-.pb-time {
-    font-size: 11px;
-    color: #9b968b;
-    font-weight: 400;
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+.plugin-block-header:hover::before {
+    animation: none;
+    opacity: 1;
+    background: #6b6358;
 }
 .pb-tokens {
-    font-size: 11px;
-    color: #9b968b;
+    font-size: 13px;
+    color: #c5bfb5;
     font-weight: 400;
+    margin-left: 8px;
+    -webkit-text-fill-color: #c5bfb5;
+    animation: none;
 }
-.plugin-block-arrow {
-    display: flex;
-    align-items: center;
-    transition: transform 0.2s;
+.plugin-block-header:hover .pb-tokens {
+    -webkit-text-fill-color: #8b8278;
 }
-.plugin-block.collapsed .plugin-block-arrow {
-    transform: rotate(-90deg);
+.plugin-block-title {
+    flex: 0 1 auto;
 }
 .plugin-block-body {
-    padding: 10px 14px;
+    margin-top: 10px;
+    padding: 12px 14px;
     font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
     background: #fdfcf9;
     color: #3c3630;
     white-space: pre-wrap;
     word-break: break-all;
-    max-height: 300px;
+    max-height: 400px;
     overflow-y: auto;
+    border: 1px solid #e8e4dc;
+    border-radius: 6px;
 }
 .plugin-block.collapsed .plugin-block-body {
     display: none;
 }
 .plugin-block.mem-block .plugin-block-header {
-    background: #f5f2fa;
-    color: #5b4e7c;
+    background: linear-gradient(90deg,
+        #b0aac4 0%, #b0aac4 35%,
+        #cec8e0 45%, #e4e0f2 50%,
+        #cec8e0 55%, #b0aac4 65%,
+        #b0aac4 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: plugin-surge 4s ease-in-out infinite;
 }
-.plugin-block.mem-block .plugin-block-body {
-    background: #faf9fd;
+.plugin-block.mem-block .plugin-block-header::before {
+    background: #cec8e0;
+}
+.plugin-block.mem-block .plugin-block-header:hover {
+    animation: none;
+    -webkit-text-fill-color: #6b5e8c;
+    background: none;
+}
+.plugin-block.mem-block .plugin-block-header:hover::before {
+    animation: none;
+    opacity: 1;
+    background: #6b5e8c;
 }
 .plugin-block.file-block .plugin-block-header {
-    background: #f2f7f2;
-    color: #4a6b3a;
+    background: linear-gradient(90deg,
+        #a4b89a 0%, #a4b89a 35%,
+        #c4d4b8 45%, #dee8d8 50%,
+        #c4d4b8 55%, #a4b89a 65%,
+        #a4b89a 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: plugin-surge 4s ease-in-out infinite;
 }
-.plugin-block.file-block .plugin-block-body {
-    background: #f9fcf9;
+.plugin-block.file-block .plugin-block-header::before {
+    background: #c4d4b8;
+}
+.plugin-block.file-block .plugin-block-header:hover {
+    animation: none;
+    -webkit-text-fill-color: #5b7a4a;
+    background: none;
+}
+.plugin-block.file-block .plugin-block-header:hover::before {
+    animation: none;
+    opacity: 1;
+    background: #5b7a4a;
 }
 
 /* 暗色模式 */
-[data-theme="dark"] .plugin-block {
-    border-color: #2a2a2a;
-}
 [data-theme="dark"] .plugin-block-header {
-    background: #1a1a1a;
-    color: #999;
+    background: linear-gradient(90deg,
+        #777 0%, #777 35%,
+        #999 45%, #bbb 50%,
+        #999 55%, #777 65%,
+        #777 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: plugin-surge 4s ease-in-out infinite;
+}
+[data-theme="dark"] .plugin-block-header::before {
+    background: #999;
 }
 [data-theme="dark"] .plugin-block-header:hover {
-    background: #222;
+    animation: none;
+    -webkit-text-fill-color: #ccc;
+    background: none;
+}
+[data-theme="dark"] .plugin-block-header:hover::before {
+    animation: none;
+    opacity: 1;
+    background: #ccc;
+}
+[data-theme="dark"] .pb-tokens {
+    -webkit-text-fill-color: #666;
+    animation: none;
+}
+[data-theme="dark"] .plugin-block-header:hover .pb-tokens {
+    -webkit-text-fill-color: #999;
 }
 [data-theme="dark"] .plugin-block-body {
     background: #141414;
     color: #ccc;
-}
-[data-theme="dark"] .pb-time,
-[data-theme="dark"] .pb-tokens {
-    color: #666;
+    border-color: #2a2a2a;
 }
 [data-theme="dark"] .plugin-block.mem-block .plugin-block-header {
-    background: #1a1a1a;
-    color: #8b8b9e;
+    background: linear-gradient(90deg,
+        #7b7b8e 0%, #7b7b8e 35%,
+        #9e9eb4 45%, #b8b8cc 50%,
+        #9e9eb4 55%, #7b7b8e 65%,
+        #7b7b8e 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: plugin-surge 4s ease-in-out infinite;
 }
-[data-theme="dark"] .plugin-block.mem-block .plugin-block-body {
-    background: #141414;
+[data-theme="dark"] .plugin-block.mem-block .plugin-block-header::before {
+    background: #9e9eb4;
+}
+[data-theme="dark"] .plugin-block.mem-block .plugin-block-header:hover {
+    animation: none;
+    -webkit-text-fill-color: #ccc;
+    background: none;
+}
+[data-theme="dark"] .plugin-block.mem-block .plugin-block-header:hover::before {
+    animation: none;
+    opacity: 1;
+    background: #ccc;
 }
 [data-theme="dark"] .plugin-block.file-block .plugin-block-header {
-    background: #1a1a1a;
-    color: #8ba67e;
+    background: linear-gradient(90deg,
+        #7b8e72 0%, #7b8e72 35%,
+        #9eb498 45%, #b8ccb2 50%,
+        #9eb498 55%, #7b8e72 65%,
+        #7b8e72 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: plugin-surge 4s ease-in-out infinite;
 }
-[data-theme="dark"] .plugin-block.file-block .plugin-block-body {
-    background: #141414;
+[data-theme="dark"] .plugin-block.file-block .plugin-block-header::before {
+    background: #9eb498;
+}
+[data-theme="dark"] .plugin-block.file-block .plugin-block-header:hover {
+    animation: none;
+    -webkit-text-fill-color: #ccc;
+    background: none;
+}
+[data-theme="dark"] .plugin-block.file-block .plugin-block-header:hover::before {
+    animation: none;
+    opacity: 1;
+    background: #ccc;
 }
 
