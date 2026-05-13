@@ -5,10 +5,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](#license)
 [![npx](https://img.shields.io/badge/npx-11.12.1-blue?logo=npm)](https://www.npmjs.com/package/npx)
-
-> ### 轻量级 便携 跨平台的 AI Web GUI客户端
-> ### 兼顾了扮演 记忆 独立编码
-> ### 无提示词污染，提供最纯净且原生的模型性能
+### 轻量级 便携 跨平台的 AI Web GUI客户端
+### 兼顾了扮演 记忆 独立编码
+### 无提示词污染，提供最纯净且原生的模型性能
 
 ## 不同语言的Md
 [English README](https://github.com/Xeno-Gen/Fold.AI/edit/main/README-en.md)
